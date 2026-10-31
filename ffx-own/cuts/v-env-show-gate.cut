@@ -1,0 +1,20 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: WHERE THE VARIANT v-env ACTS, AS A PICTURE (2026-10-11). On top of v-env: every pixel in
+# which a sample was relit comes out as one flat colour, 4 0 4, which no picture of the game holds. A replay through
+# this library is the map of where v-env may change the picture; held against the difference of v-env's picture from
+# the product's (both with nothing inpainted) it says whether anything changed where the variant says it did nothing
+# (tools\test-fg-own\env.py).
+what AN INSTRUMENT (the picture changes): with v-env, every pixel in which a sample was relit is painted one flat colour (4 0 4): the map of where the variant acts
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+--- new
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+        // (the instrument v-env-show-gate)
+        if (bEnv)
+        {
+            fInterpolatedColor = FfxFloat32x3(4.0f, 0.0f, 4.0f);
+            fInPaintingWeight  = 0.0f;      // and the inpainting pass leaves the paint alone
+        }
+--- end

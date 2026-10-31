@@ -1,0 +1,26 @@
+# THE SCENE CHANGE HISTOGRAM: NO ATOMIC ADD OF ZERO (2026-10-11, the exact cuts stage 3 left: O1 to O3 analysed).
+#
+# Every thread of the histogram pass (1,440 groups of 256 threads) ends with one atomic add into the shared histogram
+# of 9 times 256 cells: the count of its group's samples that have the thread's luma value. A group samples one strip
+# of the picture, so most of its 256 values did not occur and the thread adds ZERO. An add of zero changes nothing and
+# the adds are whole numbers, so their order does not matter either: the add is taken only when the count is not zero.
+#
+# OF THE REST OF O1 TO O3 (62 us): the prepare luma (28 us) reads 63 MiB and is at what the card's memory gives; the
+# luminance pyramid (11 us) is AMD's single pass downsampler; the divergence is 27 groups. No other exact cut found.
+#
+# MEASURED (3840x2160 FP16, a steady pair, the stamped passes, 2026-10-11): O3 24 to 23 us at Quality's guides, 23 to 23
+# at DLAA's; the same images by every hash. IT DOES NOT PAY AND IS LEFT OUT: the pass's time is not its atomic adds (it
+# is two small dispatches, of about ten microseconds each with their barriers).
+what optical flow's scene change histogram (O3): the atomic add into the shared histogram is taken only when the thread's count is not zero
+passes ffx_opticalflow_generate_scd_histogram_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_generate_scd_histogram.h
+--- old
+    AtomicIncrementSCDHistogram(FfxInt32(histogramStart + iLocalIndex), value);
+--- new
+    // (the mod's cut of-scd-no-empty-adds: an add of zero changes nothing)
+    if (value != 0u)
+    {
+        AtomicIncrementSCDHistogram(FfxInt32(histogramStart + iLocalIndex), value);
+    }
+--- end

@@ -1,0 +1,83 @@
+# A VARIANT, NEVER THE PRODUCT: THE ROAD COMING OUT FROM BEHIND A THING THAT STAYS, WHERE IT BRINGS ANOTHER LIGHT INTO A PLACE WHOSE LIGHT
+# BOTH REAL FRAMES AGREE ON (2026-10-27; round 9's tyre desk, docs\reports\fg-5\desk-2026-10-27-tyres: FINDINGS.md). ON TOP OF THE
+# PRODUCT AND v-hide-reach (it reads that cut's mark in the occlusion mask; without it, it never acts). IT CHANGES THE PICTURE ONLY
+# WHERE THE CURRENT FRAME'S SAMPLE ALONE IS USED BEHIND A THING THAT STAYS, AND ONLY BY v-edge's OWN MEANS (the current frame's pixel
+# at the place, through the product's inpainting weight).
+#
+# WHAT IS LEFT ONCE THE TYRE'S COPY IS GONE. Where the occlusion test sees the tyre hide the frame before's sample, the pixel is the
+# current frame's sample alone: the road from 60 to 70 pixels behind. When sunny and shaded patches stream past behind the tyre,
+# that road often lies in the sun while the place behind the tyre's foot lies in the car's shade, and v-env's envelopes at the
+# place, which have seen the sun pass, do not call for a relighting: a light patch the shape of the uncovered road, beside the
+# foot, from one generated frame to the next. It is v-edge's fault (the lone sample brings the light of where it was fetched)
+# away from the screen's edge.
+# THE CUT, where the frame before's sample is hidden with a thing that stays at its fetch place (v-hide-reach's mark, 1/255 in the
+# occlusion mask; both samples on the screen): the place's light in the two real frames (two pixels on a diagonal, two apart,
+# of each) and the lone sample's light where it was fetched (the same in the current frame). Where the two real frames AGREE
+# at the place (within LONE_AGREE_0, nothing from LONE_AGREE_1 apart) and the lone sample's light lies more than LONE_0 from the
+# place's (whole from LONE_1), the current frame's own pixel at the place stands in for it, by that weight (the inpainting pass,
+# as v-edge). Where the occluder itself stands at the place in one of the real frames, the two disagree and nothing is done. Not
+# in the frames after a reset, nor where the pixel hardly moves (v-env's fGrown, as v-edge reads it). The interpolation pass
+# keeps the mask's value it already samples; the cut's three reads (one pixel of each) are made only at the marked pixels, in the
+# branch of AMD's own chain where v-edge's are (placed at the pass's end, the same work cost 12 us on every generated frame; here 3:
+# tools\test-fg-own\fgtime.cpp on the capture's run 5).
+what A VARIANT (the picture changes): where the current frame's sample alone is used behind a thing that stays (v-hide-reach's mark) and both real frames agree on the place's light while that sample brings another, the current frame's own pixel at the place stands in (the inpainting weight)
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- new
+// (the variant v-lone-place) the weight of the current frame's pixel at the place for a lone sample, from the place's light in the two
+// real frames and the light where the lone sample was fetched
+FFX_STATIC const FfxFloat32 LONE_AGREE_0 = 0.35f;   // log brightness (of a picture of linear values)
+FFX_STATIC const FfxFloat32 LONE_AGREE_1 = 0.6f;
+FFX_STATIC const FfxFloat32 LONE_0       = 0.6f;
+FFX_STATIC const FfxFloat32 LONE_1       = 1.1f;
+FFX_STATIC const FfxFloat32 LONE_MARK    = 1.5f / 255.0f;   // v-hide-reach writes 1/255 where a thing that stays hid the frame before's sample
+
+FfxFloat32 lonePlace(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv)
+{
+    const FfxFloat32x2 fSize = FfxFloat32x2(DisplaySize());
+    const FfxFloat32x2 fHalf = fHalfUv * (PositionWhole() * 0.5f) * fSize;
+    FfxFloat32 fGrown = ffxSaturate((FfxFloat32(FrameIndexSinceLastReset()) - ENV_FRAME_0) / (ENV_FRAME_1 - ENV_FRAME_0));
+    fGrown *= smoothstep(ENV_MOVED_0 * ENV_MOVED_0, ENV_MOVED_1 * ENV_MOVED_1, dot(fHalf, fHalf));
+    // one pixel of each (the place now, the place before, the lone sample's fetch place now): the thresholds stand above the road's grain
+    const FfxInt32x2 iLast  = FfxInt32x2(fSize) - 1;
+    const FfxInt32x2 iPlace = clamp(FfxInt32x2(fUv * fSize), FfxInt32x2(0, 0), iLast);
+    const FfxInt32x2 iFetch = clamp(FfxInt32x2((fUv - fHalfUv) * fSize), FfxInt32x2(0, 0), iLast);
+    const FfxFloat32 fPower  = BackBufferTransferFunction() == 0 ? ENV_SRGB : 1.0f;      // a log of linear values
+    const FfxFloat32x3 fLogs = log(ffxMax(FfxFloat32x3(RGBToLuma(LoadCurrentBackbuffer(iPlace)), RGBToLuma(LoadPreviousBackbuffer(iPlace)),
+                                                       RGBToLuma(LoadCurrentBackbuffer(iFetch))), FfxFloat32x3(1.0e-6f, 1.0e-6f, 1.0e-6f))) * fPower;
+    const FfxFloat32 fAgree  = 1.0f - smoothstep(LONE_AGREE_0, LONE_AGREE_1, abs(fLogs.x - fLogs.y));
+    return fAgree * fGrown * smoothstep(LONE_0, LONE_1, abs(fLogs.z - 0.5f * (fLogs.x + fLogs.y)));
+}
+
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    FfxFloat32x2 fDisocclusionFactor = FfxFloat32x2(FFX_EQUAL(ffxSaturate(SampleDisocclusionMask(fLrUvInInterpolationRect).xy), FfxFloat32x2(1.0, 1.0)));
+--- new
+    // (the variant v-lone-place) the mask's value as sampled is kept: v-hide-reach's mark is read from it at the pass's end
+    const FfxFloat32x2 fDisocclusionSampled = ffxSaturate(SampleDisocclusionMask(fLrUvInInterpolationRect).xy);
+    FfxFloat32x2 fDisocclusionFactor = FfxFloat32x2(FFX_EQUAL(fDisocclusionSampled, FfxFloat32x2(1.0, 1.0)));
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        if (fPrevColorGame.fBilinearWeightSum == 0.0f)
+        {
+            fInterpolatedColor = fCurrColorGame.fRaw;
+        }
+--- new
+        if (fPrevColorGame.fBilinearWeightSum == 0.0f)
+        {
+            fInterpolatedColor = fCurrColorGame.fRaw;
+        }
+        // (the variant v-lone-place) the current frame's sample alone behind a thing that stays (the mark; both samples on the screen: at
+        // the screen's edges v-edge's own rule stands): where both real frames agree on the place's light and that sample brings another,
+        // the current frame's pixel at the place stands in (the inpainting pass)
+        else if (fDisocclusionSampled.x > 0.0f && fDisocclusionSampled.x < LONE_MARK && fCurrColorGame.fBilinearWeightSum > 0.0f)
+        {
+            updateInPaintingWeight(fInPaintingWeight, lonePlace(fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale));
+        }
+--- end

@@ -1,0 +1,13 @@
+# v-env WITH ONE OF ITS THREE MENDS OF 2026-10-12 TAKEN OUT, to judge and to price that mend by itself (ffx-own\cuts\v-env.cut says what
+# the mend is; docs\reports\fg-3\sitting-2026-10-12\lib4\README.md has its numbers). On top of v-env, never without it.
+what A VARIANT (the picture changes): v-env without its mend 2 (nothing for a sample that hardly moves)
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    // (MEND 2, NOTHING FOR A SAMPLE THAT HARDLY MOVES) a thing that stands nearly still on the screen (the car itself, a far hill)
+    // carries its own edges and its own shading with it, and the envelopes' slope across such an edge is not a light
+    // it moves through. Nothing under a half vector of ENV_MOVED_0 pixels of the display, whole from ENV_MOVED_1 on
+    fGrown *= smoothstep(ENV_MOVED_0 * ENV_MOVED_0, ENV_MOVED_1 * ENV_MOVED_1, dot(fHalf, fHalf));
+--- new
+--- end

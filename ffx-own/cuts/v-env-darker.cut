@@ -1,0 +1,30 @@
+# A VARIANT, NEVER THE PRODUCT: v-env MAY DARKEN A SAMPLE FURTHER THAN IT MAY BRIGHTEN ONE (2026-10-27; round 9's tyre desk,
+# docs\reports\fg-5\desk-2026-10-27-tyres: FINDINGS.md). ON TOP OF THE PRODUCT. IT CHANGES THE PICTURE ONLY WHERE A SAMPLE NEEDS A
+# DARKENING OF MORE THAN 16 TIMES.
+#
+# WHAT THE PRODUCT DOES THERE. v-env holds a sample's brightness gain within 1/16 and 16 (ENV_GAIN_MOST, log 16). In the game's HDR
+# picture the sunlit road is 50 to 80 times as bright as the road in the car's shade (the owner's capture of 2026-10-27: log
+# brightness about -0.1 in the sun, -4.3 in the shade). A piece of sunlit road put into the car's shade, as the road coming out
+# from behind the tyre is, is darkened 16 times and stays 3 to 5 times too bright: a light patch the shape of what was uncovered,
+# in the shade beside the tyre (the shadow-edge light of 2026-10-26, and what is left of the tyre's copy once the occlusion test
+# sees the tyre).
+# THE CUT: the brightness's gain may go down to 1/ENV_DARK_MOST (log 128) and up to 16 as before. A darkening cannot flare, and
+# only a sample whose envelopes BOTH lie more than log 16 above the place's (envOne: the smaller of the two differences) is
+# darkened more. The tints keep their own bound.
+what A VARIANT (the picture changes): v-env's brightness gain may darken a sample down to 1/128 (it brightens up to 16 as before)
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fNeeded = clamp(abs(fBy.x) < abs(fBy.y) ? fBy.x : fBy.y, -fMost, fMost);
+--- new
+        // (the variant v-env-darker) the brightness may be darkened down to 1/ENV_DARK_MOST
+        fNeeded = clamp(abs(fBy.x) < abs(fBy.y) ? fBy.x : fBy.y, fMost == ENV_GAIN_MOST ? -ENV_DARK_MOST : -fMost, fMost);
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FFX_STATIC const FfxFloat32 ENV_TINT_MOST     = 1.0f;       // a tint's gain is held within 1/e and e
+--- new
+FFX_STATIC const FfxFloat32 ENV_TINT_MOST     = 1.0f;       // a tint's gain is held within 1/e and e
+FFX_STATIC const FfxFloat32 ENV_DARK_MOST     = 4.852f;     // (the variant v-env-darker) log 128: the brightness may be darkened down to 1/128
+--- end

@@ -1,0 +1,100 @@
+# OPTICAL FLOW'S FILTER OF LEVELS 6 TO 1, DONE BY THE SCALE PASS THAT READS IT (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. For each of its seven pyramid levels, coarsest first, optical flow runs a search, then a filter
+# of the vectors it found (each vector becomes the one of its 3 by 3 neighbourhood that lies nearest to the other
+# eight), and then, for every level but the finest, a scale pass that hands the filtered vectors to the next finer
+# level as its predictions. Twenty dispatches, most of them of a few thousand threads, and the table by pass shows that
+# such a dispatch costs microseconds whatever it computes.
+#
+# WHO READS A FILTERED LEVEL, BY THE SOURCE (ffx_opticalflow.cpp at tag v2.3.0, 834 to 931). Level 0's filtered vectors
+# are optical flow's result. The filtered vectors of a level from 1 to 6 are written into an image of that level and
+# bound to exactly one reader, the scale pass of the same level (902; the "alias" binding of 896 is read by no shader
+# of this tag). The next frame the same image is the next search's prediction image, which the scale pass above it
+# writes whole before the search reads it.
+#
+# THE CUT. The scale pass computes the filter itself: where it loaded a filtered vector it loads the nine vectors the
+# filter would have loaded, from the search's own result (bound to it in the filtered image's place), and picks by
+# AMD's own arithmetic, word for word. Outside the image the filtered image gave zero (a load outside an image), and so
+# does this: the position is tested against the image's size first. The filter's dispatch is scheduled for level 0
+# alone. All of it is whole-number arithmetic on the same loads.
+# Six dispatches fewer a pair. The filtered images of levels 1 to 6 are then never written and never read.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what optical flow's scale pass (O8) filters the vectors it reads itself; the filter pass (O7) is dispatched for level 0 alone: six dispatches fewer a pair
+passes ffx_opticalflow_scale_optical_flow_advanced_pass_v5
+wave64 it edits the scale pass's file, from which the cs_6_2 variant and the cs_6_6 one WITH [WaveSize(64)] are both compiled, and two lines of ffx_opticalflow.cpp that run on every device; the code added uses no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_scale_optical_flow_advanced_v5.h
+--- old
+void ScaleOpticalFlowAdvanced(FfxInt32x3 iGlobalId, FfxInt32x3 iLocalId)
+{
+--- new
+// (the mod's cut of-filter-into-scale) THE FILTERED VECTOR OF A POSITION, from the search's own result: AMD's
+// FilterOpticalFlow (ffx_opticalflow_filter_optical_flow_v5.h), word for word, with the position handed in and the
+// vector handed back where that pass stored it. A position outside the image is zero, as a load of the filtered image
+// outside itself was.
+FfxInt32x2 FilteredOpticalFlow(FfxInt32x2 iPos)
+{
+    FfxUInt32 uWidth;
+    FfxUInt32 uHeight;
+    r_optical_flow.GetDimensions(uWidth, uHeight);
+    if (FfxUInt32(iPos.x) >= uWidth || FfxUInt32(iPos.y) >= uHeight)
+    {
+        return FfxInt32x2(0, 0);
+    }
+
+    FfxInt32x2 tmpMV[9];
+    FfxInt32 idx = 0;
+    for (FfxInt32 xx = -1; xx < 2; xx++)
+    {
+        for (FfxInt32 yy = -1; yy < 2; yy++)
+        {
+
+            tmpMV[idx] = LoadOpticalFlow(iPos + FfxInt32x2(xx, yy));
+            idx++;
+        }
+    }
+
+    FfxUInt32  ret = 0xFFFFFFFF;
+    for (FfxInt32 i = 0; i < 9; ++i)
+    {
+        FfxUInt32 tmp = 0;
+        for (FfxInt32 j = 0; j < 9; ++j)
+        {
+            FfxInt32x2 delta = tmpMV[i] - tmpMV[j];
+            tmp = delta.x * delta.x + (delta.y * delta.y + tmp);
+        }
+
+        ret = min(((tmp) << 4) | i, ret);
+    }
+
+    FfxUInt32 minIdx = ret & 0xF;
+
+    return tmpMV[minIdx];
+}
+
+void ScaleOpticalFlowAdvanced(FfxInt32x3 iGlobalId, FfxInt32x3 iLocalId)
+{
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_scale_optical_flow_advanced_v5.h
+--- old
+    FfxInt32x2 nearestVector = LoadOpticalFlow(srcOFPos);
+--- new
+    FfxInt32x2 nearestVector = FilteredOpticalFlow(srcOFPos);
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+                    {
+                        scheduleDispatch(context, &context->pipelineFilterOpticalFlowV5, pipelineName.c_str(), dispatchX, dispatchY);
+                    }
+--- new
+                    if (level == 0)     // (the mod's cut of-filter-into-scale: a level from 1 to 6 is filtered by its scale pass)
+                    {
+                        scheduleDispatch(context, &context->pipelineFilterOpticalFlowV5, pipelineName.c_str(), dispatchX, dispatchY);
+                    }
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+                        context->srvBindings[FFX_OF_BINDING_IDENTIFIER_OPTICAL_FLOW] = context->resources[opticalFlowResourceIndexB + level];
+--- new
+                        context->srvBindings[FFX_OF_BINDING_IDENTIFIER_OPTICAL_FLOW] = context->resources[opticalFlowResourceIndexA + level];     // (the mod's cut of-filter-into-scale: the search's own result, not the filtered image)
+--- end

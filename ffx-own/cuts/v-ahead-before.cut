@@ -1,0 +1,83 @@
+# A VARIANT, NEVER THE PRODUCT: THE ROAD JUST AHEAD OF THE TYRE KEEPS THE FRAME BEFORE'S SAMPLE (2026-10-28; the tyre's leftovers,
+# docs\reports\fg-5\desk-2026-10-28-tyre-leftovers\FINDINGS.md). ON TOP OF THE PRODUCT (it reads v-hide-reach's numbers). IT CHANGES THE
+# PICTURE ONLY WHERE THE OCCLUSION PASS CALLED BOTH SAMPLES HIDDEN, A THING THAT STAYS HIDES THE CURRENT FRAME'S, AND THE FRAME BEFORE'S
+# SAMPLE HOLDS A LIGHT THE PLACE HAS SHOWN.
+#
+# THE OWNER'S SYMPTOM (2026-10-28, on the build with round 9's tyre fix): "yes I can still see it sometimes": a light streak on the
+# tyre's front side in generated frames.
+# WHAT THE PRODUCT DOES THERE. Just ahead of the tyre the road is about to go under it: the current frame's sample is the tyre, hidden
+# (rightly). The frame before's sample is the road, and AMD's depth test calls it hidden too at scattered pixels (v-show-hide: hidden by
+# AMD's own test, nothing that stays at the fetch place, no bounce). With both hidden the pixel is inpainted, which here gives the current
+# frame's light at the place: where sun has come in by the current frame, single bright pixels in a line along the tyre's front.
+# THE CUT, in the occlusion pass alone, for a pixel that moves (v-hide-reach's branch), where AMD's test hid BOTH samples and v-hide-reach
+# found nothing that stays at the frame before's fetch place nor the bounce:
+#   the thing at that fetch place in the current frame moves like the pixel (within HBV_SHARE of its vector), and the thing at the
+#     CURRENT frame's fetch place stays (hbvStaying): two reads of the dilated vectors, and
+#   the frame before's sample (that frame's picture at its fetch place, one pixel) holds a light within AHEAD_FIT of the range the place
+#     shows in the two real frames (one pixel of each): the two pictures are bound to this pass for it (SRV 8 and 9, the interpolation
+#     pass's own two);
+# then the frame before's sample is visible. Every read and test is made only at the pixels where both samples are hidden: nothing is
+# added to the pass's common path (its first form kept one flag a moving pixel; the same price, fgtime on the game's frames).
+# TRIED FIRST AND NOT KEPT (FINDINGS.md): (1) the vector test alone, without the current fetch place's thing staying and without the
+# light, took the frame before's sample wherever both were hidden and the vectors at the fetch place moved like the pixel; on the
+# dented car of 2026-10-26 (G2), whose vectors on the dent move like the road, it made 25 to 30 percent more dark pixels behind the
+# tyres (a copy of the car where the place's light is the road's); the current fetch place's test alone did not take that away.
+# (2) the light test in the interpolation pass, behind a mark the occlusion pass wrote: the same picture, but the interpolation pass
+# cost 8 to 10 us more a generated frame (fgtime on the game's frames) for a branch taken at a few dozen pixels. (3) A depth test on the
+# thing at the current fetch place (within 15 percent of the pixel's depth, to leave poles before the sky alone): it took the specks'
+# fix away entirely (the tyre there lies farther from the pixel's interpolated depth than that), and poles change by nothing it
+# can measure without it (outrange.py: within 0.04 percent of the product's pixels outside the real frames' range).
+what A VARIANT (the picture changes): where both samples of a moving pixel are hidden, a thing that stays hides the current frame's, the thing at the frame before's fetch place moves like the pixel and that sample's light is one the place has shown, the frame before's sample is visible
+passes ffx_frameinterpolation_disocclusion_mask_pass
+wave64 the same edits in both variants: no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_disocclusion_mask_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_DILATED_MOTION_VECTORS                  7   // (the variant v-hide-by-vector) this frame's dilated vectors
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_DILATED_MOTION_VECTORS                  7   // (the variant v-hide-by-vector) this frame's dilated vectors
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_PREVIOUS_INTERPOLATION_SOURCE           8   // (the variant v-ahead-before) the two real frames' pictures
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_CURRENT_INTERPOLATION_SOURCE            9
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+static FfxBoolean g_hbvStays = false;                // the thing at the fetch place stays (set once a pixel, before the test)
+--- new
+static FfxBoolean g_hbvStays = false;                // the thing at the fetch place stays (set once a pixel, before the test)
+FFX_STATIC const FfxFloat32 AHEAD_FIT = 0.35f;       // (the variant v-ahead-before) log brightness: the frame before's sample may lie this far outside the place's range
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    fDisocclusionMask.y = ffxSaturate(fDisocclusionMask.y + FfxFloat32(!IsOnScreen(iSamplePosCurrent, RenderSize())));
+--- new
+    fDisocclusionMask.y = ffxSaturate(fDisocclusionMask.y + FfxFloat32(!IsOnScreen(iSamplePosCurrent, RenderSize())));
+
+    // (the variant v-ahead-before) both samples hidden, the frame before's by AMD's test alone, where the thing at its fetch place moves like
+    // the pixel, a thing that stays stands at the current frame's fetch place and the frame before's sample holds a light the place has shown
+    // (the vectors are read here, only where both samples are hidden: nothing is added to the pass's common path)
+    const FfxFloat32x2 fAheadSize = FfxFloat32x2(RenderSize());
+    const FfxFloat32x2 fAheadHere = g_hbvWhole * fAheadSize;
+    if (fDisocclusionMask.x == 0.0f && fDisocclusionMask.y == 0.0f && !bStoodThere && dot(fAheadHere, fAheadHere) > HBV_MIN_PX * HBV_MIN_PX)
+    {
+        const FfxInt32x2   iLastR  = FfxInt32x2(RenderSize()) - 1;
+        const FfxFloat32x2 fFetch  = (fDepthUv + gameMv.fMotionVector * PositionToPrevious()) * fAheadSize;
+        const FfxInt32x2   iAhead  = clamp(FfxInt32x2(floor((fDepthUv - gameMv.fMotionVector) * fAheadSize)), FfxInt32x2(0, 0), iLastR);
+        const FfxFloat32x2 fThere  = LoadDilatedMotionVector(clamp(FfxInt32x2(floor(fFetch)), FfxInt32x2(0, 0), iLastR)) * fAheadSize;
+        const FfxFloat32x2 fAhead  = LoadDilatedMotionVector(iAhead) * fAheadSize;
+        if (IsOnScreen(FfxInt32x2(floor(fFetch)), RenderSize()) && dot(fAheadHere - fThere, fAheadHere - fThere) < HBV_SHARE * HBV_SHARE * dot(fAheadHere, fAheadHere)
+            && hbvStaying(fAhead))
+        {
+            // one pixel of each picture (display pixels): the place now and before, the frame before's sample at its fetch place
+            const FfxFloat32x2 fShow  = FfxFloat32x2(DisplaySize());
+            const FfxInt32x2   iLastD = FfxInt32x2(DisplaySize()) - 1;
+            const FfxInt32x2   iPlace = clamp(FfxInt32x2(fDepthUv * fShow), FfxInt32x2(0, 0), iLastD);
+            const FfxInt32x2   iPrev  = clamp(FfxInt32x2((fDepthUv + gameMv.fMotionVector * PositionToPrevious()) * fShow), FfxInt32x2(0, 0), iLastD);
+            const FfxFloat32   fPower = BackBufferTransferFunction() == 0 ? 2.2f : 1.0f;      // a log of linear values (v-env's ENV_SRGB)
+            const FfxFloat32x3 fLogs  = log(ffxMax(FfxFloat32x3(RGBToLuma(LoadCurrentBackbuffer(iPlace)), RGBToLuma(LoadPreviousBackbuffer(iPlace)),
+                                                               RGBToLuma(LoadPreviousBackbuffer(iPrev))), FfxFloat32x3(1.0e-6f, 1.0e-6f, 1.0e-6f))) * fPower;
+            if (fLogs.z > ffxMin(fLogs.x, fLogs.y) - AHEAD_FIT && fLogs.z < ffxMax(fLogs.x, fLogs.y) + AHEAD_FIT)
+            {
+                fDisocclusionMask.x = 1.0f;
+            }
+        }
+    }
+--- end

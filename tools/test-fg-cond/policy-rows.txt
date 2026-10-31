@@ -1,0 +1,129 @@
+# THE POLICY'S ROWS FOR THE CONDITIONS' BENCH (round 6, G: docs/FG-PLAN-TO-FINISH-2026-10-24.md, "The regression guard", 4).
+# WRITTEN FROM docs/FG-POLICY-AND-PLAN-1.1.md AND THE PLAN, NEVER FROM THE CODE, and never by the builder whose code they judge: each row is
+# a situation the policy names and what 1.1 does there, as the conditions' table must answer it (OK: frame generation may run; a row's
+# enum name: it stands by or is off for that reason). policy.cpp (beside this file) asks source/fg/fg_cond.h unchanged; run.py runs it.
+#
+# A ROW: <its name> | <the facts> | <the answer> [| PENDING <who>: <why>]
+# THE FACTS (key=value; the rest is the SHIPPED BUILD of the round 6 design: HDR on, an FP16 back buffer, a window, two back buffers,
+# the fixed mode on by default (fg_fixed 1), the fill compiled out (fillCan 0, availability 0), nothing lifted, vsync on):
+#   hz=N or num=N den=N   the refresh          vrr=1 VRR, vrr=0 a fixed screen        vsync=0 vsync off       sdr=1 8-bit, HDR off
+#   game=X                the game's own rate standing by, or R_on engaged (tenths: 103.2 is 1032; whole numbers here are frames a second)
+#   free=X                engaged, R_free (the game's own rate)        pred=X  standing by, the rate predicted with frame generation (default: game)
+#   engaged=1             frame generation is on now                   minfps=N  fg_min_fps set by the player       fixover=1  the overrun stands
+#   fill=2 can=2          the armed development build's fill: available and possible here (a row that says "any fill availability")
+#   menu=1                a menu is up
+#   (round 7) L=us wins=N over2=P   engaged in the fixed mode: the law's L (the 98th of the last 4 s) read N windows running (10 if not
+#                         given), with P percent of the game's own frames over the period the mode holds it at (two refreshes). The policy's
+#                         facts; policy.cpp's adapter hands them to the overrun's reading as the code has it (round 6's reads L alone)
+# ANSWERS: OK or a row's enum name, the table's; (round 7) FILL or FIXED, THE FILL'S CHOICE in a build that has the fill (the fill, or the
+# fixed mode's doubling at half the refresh): not the table's, so UNASKED until the bench asks the fill's step (it must carry a PENDING mark).
+# PENDING <who>: the row is the round's work in another builder's package; it does not fail while it does not hold, and FAILS THE DAY IT
+# HOLDS until the mark is taken off (so a mark never outlives the change). Rates are frames a second; the bench reads tenths.
+# (round 7, G: the rows of round 6's decisions, docs/FG-PLAN-TO-FINISH-2026-10-24.md's last section, binding: the 30 floor on 60 Hz with the
+# doubling on by default there; no fill on a variable display in any build; the fill's trade line, 1.25 x half the refresh on fixed screens;
+# the fixed mode's overrun by the bulk, never the tail; 165 to 240 Hz on the doubling. Each section is marked "round 7".)
+
+# ---- NATIVE AT OR NEAR THE REFRESH, AND ON VRR ABOVE THE LAW'S TOP (about 0.56 of the refresh: 67 at 120 Hz, C's 59.1 scaled; VRR
+# paces it). BETWEEN HALF THE REFRESH AND THAT TOP THE LAW DOUBLES, held at C (59.1 at 120 Hz): the lawedge legs passed exactly this
+VRR 120, the game at 110 by itself: native                      | hz=120 vrr=1 game=110          | FGC_FAST
+VRR 120, the game at 90 by itself (above the law's top): native | hz=120 vrr=1 game=90           | FGC_FAST
+VRR 144, the game at 100 by itself: native                      | hz=144 vrr=1 game=100          | FGC_FAST
+VRR 240, the game at 150 by itself (above the law's top): native | hz=240 vrr=1 game=150          | FGC_FAST
+fixed 120, the game at 118 by itself (at the refresh): native   | hz=120 vrr=0 game=118          | FGC_FAST
+VRR 120, the game at 63 by itself (over half, under the top): the law doubles, held at 59.1 | hz=120 vrr=1 game=63 | OK
+VRR 120, the game at 66 by itself (just under the top of 67): the law doubles | hz=120 vrr=1 game=66 | OK
+VRR 120, engaged held at 59.1, the game's own 66: it stays (lawedge, the eye smooth) | hz=120 vrr=1 engaged=1 game=59.1 free=66 | OK
+VRR 120, the game at 70 by itself (over the law's top): native | hz=120 vrr=1 game=70 | FGC_FAST
+# ---- THE DOUBLING ON VRR BELOW HALF THE REFRESH
+VRR 120, the game at 50 by itself: the doubling                 | hz=120 vrr=1 game=50 pred=47   | OK
+VRR 120, engaged at 47 real, the game's own 50: it stays        | hz=120 vrr=1 engaged=1 game=47 free=50 | OK
+VRR 144, the game at 60 by itself: the doubling                 | hz=144 vrr=1 game=60           | OK
+VRR 165, the game at 70 by itself: the doubling                 | hz=165 vrr=1 game=70           | OK
+VRR 240, the game at 100 by itself: the doubling (165 to 240 Hz) | hz=240 vrr=1 game=100         | OK
+# ---- THE FLOORS: 38 real elsewhere, standing down under 35 (the owner, 2026-10-27; 40 and 37 before), fg_min_fps overrides
+VRR 120, the game at 42 by itself, 41 with it: the doubling (the floor is 38) | hz=120 vrr=1 game=42 pred=41 | OK
+VRR 120, the game at 40 by itself, 38.5 with it: the doubling   | hz=120 vrr=1 game=40 pred=38.5 | OK
+VRR 120, the game at 37 by itself: under the floor of 38        | hz=120 vrr=1 game=37           | FGC_SLOW
+VRR 120, the game at 45, 37 with it: under the floor with it    | hz=120 vrr=1 game=45 pred=37   | FGC_ONSLOW
+VRR 120, engaged at 36.6 real, the game's own 36.6 (rel-flw's heavy part, 2026-10-27): it stays | hz=120 vrr=1 engaged=1 game=36.6 free=36.6 | OK
+VRR 120, engaged at 34 real: under 35, it stands down           | hz=120 vrr=1 engaged=1 game=34 free=38 | FGC_SLOW
+VRR 120, fg_min_fps 30, the game at 33: the doubling            | hz=120 vrr=1 minfps=30 game=33 | OK
+VRR 120, fg_min_fps 50, the game at 45: under the player's floor | hz=120 vrr=1 minfps=50 game=45 | FGC_SLOW
+# ---- 60 Hz SCREENS: 30 real by default; 59.94 read as 60; VRR panels 59 Hz and up (under that, refused)
+VRR 60, the game at 32 by itself: the doubling from 30          | hz=60 vrr=1 game=32            | OK
+VRR 60, the game at 45 by itself (above the law's top): native | hz=60 vrr=1 game=45            | FGC_FAST
+VRR 60, the game at 27 by itself: under the 30 of a 60 Hz screen | hz=60 vrr=1 game=27           | FGC_SLOW
+VRR 59.94, the game at 31 by itself: the doubling, read as 60   | num=60000 den=1001 vrr=1 game=31 | OK
+VRR 50, the game at 30 by itself: a panel under 59 Hz is refused | hz=50 vrr=1 game=30           | FGC_PANEL
+# ---- THE FIXED MODE ON FIXED SCREENS: held to half the refresh, doubled
+fixed 120, the game at 103 by itself: the fixed mode            | hz=120 vrr=0 game=103          | OK
+fixed 120, engaged at half the refresh, no fill: it stays       | hz=120 vrr=0 engaged=1 game=59.9 free=103 | OK
+fixed 120, engaged at half the refresh, any fill availability: it stays | hz=120 vrr=0 engaged=1 game=59.9 free=103 fill=2 can=2 | OK
+fixed 120, engaged at 60.0, the game's own 109, the fill available: it stays | hz=120 vrr=0 engaged=1 game=60 free=109 fill=2 can=2 | OK
+fixed 120, engaged, the game overruns two refreshes: stands by  | hz=120 vrr=0 engaged=1 game=59.9 free=70 fixover=1 | FGC_SLOW
+fixed 120, the game at 50 by itself: stands by (the grid of two is 1.2's) | hz=120 vrr=0 game=50 | FGC_SLOW
+fixed 144, the game at 100 by itself: the fixed mode at 72      | hz=144 vrr=0 game=100          | OK
+fixed 60, the game at 45 by itself, fg_min_fps unset: the fixed mode, 30 doubled to 60 | hz=60 vrr=0 game=45 | OK
+fixed 60, doubled at 30, fg_min_fps unset: it stays             | hz=60 vrr=0 engaged=1 game=30 free=45 | OK
+fixed 59.94, doubled at 29.9 (half of 59.94 is 29.97): it stays | num=60000 den=1001 vrr=0 engaged=1 game=29.9 free=45 | OK
+fixed 59.94, the game at 45 by itself: the fixed mode           | num=60000 den=1001 vrr=0 game=45 | OK
+fixed 60, fg_min_fps 40, the game at 45: the half refresh is under the player's floor | hz=60 vrr=0 minfps=40 game=45 | FGC_SLOW
+fixed 120, vsync off: stands by until vsync is on               | hz=120 vrr=0 vsync=0 game=103  | FGC_VSYNCOFF
+# (fg18-fix, F2, the release audit of 2026-10-28: "a fixed 60 to 90 Hz screen with the game's vsync off says to turn vsync on and is not a reset
+# row; a real panel under 59 Hz on VRR still gets PANEL". FGC_PANEL answered these three until then)
+fixed 60, vsync off: stands by until vsync is on, as at 120      | hz=60 vrr=0 vsync=0 game=45    | FGC_VSYNCOFF
+fixed 59.94, vsync off: stands by until vsync is on              | num=60000 den=1001 vrr=0 vsync=0 game=45 | FGC_VSYNCOFF
+fixed 75, vsync off: stands by until vsync is on                 | hz=75 vrr=0 vsync=0 game=60    | FGC_VSYNCOFF
+fixed 50, vsync off: a fixed screen under 59 Hz stays refused    | hz=50 vrr=0 vsync=0 game=45    | FGC_PANEL
+# ---- (round 7) THE 30 FLOOR ON 60 Hz STAYS, THE DOUBLING ON BY DEFAULT THERE (the owner's decision 1, round 6's weak60)
+fixed 60, the game at 54.6 by itself (weak60's): the fixed mode, 30 doubled to 60, on by default | hz=60 vrr=0 game=54.6 | OK
+fixed 60, doubled at 30.1, the game's own 54.6 (weak60's): it stays | hz=60 vrr=0 engaged=1 game=30.1 free=54.6 | OK
+fixed 60, the game at 31 by itself: the fixed mode from 30 | hz=60 vrr=0 game=31 | OK
+fixed 60, the game at 28 by itself: under the 30 of a 60 Hz screen | hz=60 vrr=0 game=28 | FGC_SLOW
+fixed 60, the game at 59 by itself (at the refresh): native     | hz=60 vrr=0 game=59 | FGC_FAST
+VRR 60, engaged at 30 real, the game's own 32: it stays (30 the floor, 27 to stand down) | hz=60 vrr=1 engaged=1 game=30 free=32 | OK
+# ---- (round 7) NO FILL ON A VARIABLE DISPLAY IN ANY BUILD: native is already even and quicker there (the owner's decision 2). In a build
+# that has the fill (the development build: fill=2 can=2) the law's top on VRR is the plain one: the doubling below it, native above it
+VRR 120, a build with the fill, the game at 95 by itself: native, never the fill | hz=120 vrr=1 game=95 fill=2 can=2 | FGC_FAST
+VRR 120, a build with the fill, the game at 75 by itself: native, never the fill | hz=120 vrr=1 game=75 fill=2 can=2 | FGC_FAST
+VRR 144, a build with the fill, the game at 110 by itself: native, never the fill | hz=144 vrr=1 game=110 fill=2 can=2 | FGC_FAST
+VRR 60, a build with the fill, the game at 45 by itself: native, never the fill | hz=60 vrr=1 game=45 fill=2 can=2 | FGC_FAST
+VRR 240, a build with the fill, the game at 150 by itself: native, never the fill | hz=240 vrr=1 game=150 fill=2 can=2 | FGC_FAST
+VRR 120, a build with the fill, the game at 50 by itself: the doubling | hz=120 vrr=1 game=50 fill=2 can=2 | OK
+VRR 120, a build with the fill, engaged at 59.1, the game's own 63: the doubling, never the fill | hz=120 vrr=1 engaged=1 game=59.1 free=63 fill=2 can=2 | DOUBLE | PENDING F (round 7, F2): the fill's choice, unasked by this bench
+# ---- (round 7) THE FILL'S TRADE LINE ON FIXED SCREENS (the owner's decision 2): the fill engages and stays only while ITS OWN REAL RATE, with
+# generation running, holds at least 1.25 x half the refresh (75 at 120 Hz, 38 at 60 Hz), else the fixed mode; a CPU-limited game over a
+# step takes the fixed mode, never a flap. FILL or DOUBLE is the fill's choice (unasked until the bench asks the fill's step). Rows of the
+# table beside them: under the line the fixed mode carries frame generation on, never a stand-down. rate=X: the fill's own real rate
+fixed 120, a card-limited game at 95, the fill's own real rate 80 (over 75): the fill | hz=120 vrr=0 engaged=1 game=95 rate=80 fill=2 can=2 | FILL | PENDING F (round 7, F3): the trade in place of round 6's headroom rule; unasked
+fixed 120, a card-limited game at 95, the fill's own real rate 75 (on the line): the fill | hz=120 vrr=0 engaged=1 game=95 rate=75 fill=2 can=2 | FILL | PENDING F (round 7, F3): unasked
+fixed 120, a card-limited game at 85, the fill's own real rate 72 (under 75): the fixed mode | hz=120 vrr=0 engaged=1 game=85 rate=72 fill=2 can=2 | DOUBLE | PENDING F (round 7, F3): unasked
+fixed 60, a weak machine at 45 card-limited, the fill's own real rate 40 (over 38): the fill | hz=60 vrr=0 engaged=1 game=45 rate=40 fill=2 can=2 | FILL | PENDING F (round 7, F3): unasked
+fixed 60, a weak machine at 42, the fill's own real rate 36 (under 38): the fixed mode | hz=60 vrr=0 engaged=1 game=42 rate=36 fill=2 can=2 | DOUBLE | PENDING F (round 7, F3): unasked
+fixed 120, a CPU-limited game at 97, its frames uniformly over a step: the fixed mode, never a flap | hz=120 vrr=0 engaged=1 game=97 cpu=over fill=2 can=2 | DOUBLE | PENDING F (round 7, F3): the CPU part without the card's wait and by the share that fits a step; unasked
+fixed 120, a build with the fill, engaged at 70 real, the game's own 95 (under the line): frame generation stays on | hz=120 vrr=0 engaged=1 game=70 free=95 fill=2 can=2 | OK
+fixed 60, a build with the fill, engaged at 36 real, the game's own 45 (under the line): frame generation stays on | hz=60 vrr=0 engaged=1 game=36 free=45 fill=2 can=2 | OK
+fixed 120, a build with the fill, the game at 95 by itself: frame generation (the fill or the fixed mode) | hz=120 vrr=0 game=95 fill=2 can=2 | OK
+fixed 60, a build with the fill, the game at 45 by itself: frame generation (the fill or the fixed mode) | hz=60 vrr=0 game=45 fill=2 can=2 | OK
+# ---- (round 7) THE FIXED MODE'S OVERRUN BY THE BULK, NEVER THE TAIL (the owner's decision 3): it stands down only where the bulk of the
+# game's frames cannot hold half the refresh; GTA IV's normal streaming spikes (about 2 percent of frames over two refreshes) keep it
+fixed 60, doubled at 30.1, the game's own 54.6, about 2 percent of its frames over two refreshes (weak60: L 37,370 us), 10 windows: it stays | hz=60 vrr=0 engaged=1 game=30.1 free=54.6 L=37370 over2=2 wins=10 | OK
+fixed 120, doubled at 59.9, the game's own 102.9, about 2 percent of its frames over two refreshes (fill120: L 17,677 us), 10 windows: it stays | hz=120 vrr=0 engaged=1 game=59.9 free=102.9 L=17677 over2=2 wins=10 | OK
+fixed 120, doubled at 60.0, the game's own 100, one streaming burst (L 25,000 us two windows running): it stays | hz=120 vrr=0 engaged=1 game=60 free=100 L=25000 over2=3 wins=2 | OK
+fixed 60, the game uniformly over the period (every frame over two refreshes: R_on 29.0, the game's own 29, L 36,000 us), 10 windows: stands down | hz=60 vrr=0 engaged=1 game=29 free=29 L=36000 over2=100 wins=10 | FGC_SLOW
+fixed 120, the game uniformly over the period (R_on 58.5, the game's own 58.5, L 17,600 us), 10 windows: stands down | hz=120 vrr=0 engaged=1 game=58.5 free=58.5 L=17600 over2=100 wins=10 | FGC_SLOW
+fixed 120, doubled at 59.9, the game's own 70, its bulk over two refreshes (L 19,500 us, half its frames over), 10 windows: stands down | hz=120 vrr=0 engaged=1 game=59.9 free=70 L=19500 over2=50 wins=10 | FGC_SLOW
+# ---- (round 7) 165 TO 240 Hz ON THE DOUBLING (the policy's table; 120 real shown as 240 is already the right answer)
+VRR 165, engaged at 70 real, the game's own 75: it stays         | hz=165 vrr=1 engaged=1 game=70 free=75 | OK
+VRR 165, the game at 100 by itself (over the law's top): native | hz=165 vrr=1 game=100 | FGC_FAST
+VRR 180, the game at 80 by itself: the doubling                 | hz=180 vrr=1 game=80 | OK
+VRR 240, the game at 110 by itself: the doubling                | hz=240 vrr=1 game=110 | OK
+VRR 240, engaged at 110 real, the game's own 118: it stays       | hz=240 vrr=1 engaged=1 game=110 free=118 | OK
+VRR 240, the game at 45 by itself: the doubling (the floor is 38) | hz=240 vrr=1 game=45 | OK
+fixed 240, the game at 200 by itself: the fixed mode at 120, shown at 240 | hz=240 vrr=0 game=200 | OK
+fixed 240, engaged at 119.9, the game's own 200: it stays        | hz=240 vrr=0 engaged=1 game=119.9 free=200 | OK
+fixed 165, the game at 120 by itself: the fixed mode at 82.5     | hz=165 vrr=0 game=120 | OK
+fixed 240, a build with the fill, the game at 180 by itself: the fixed mode's doubling, never the fill | hz=240 vrr=0 engaged=1 game=119.9 free=180 fill=2 can=2 | DOUBLE | PENDING F (round 7, F4): the fill's choice, unasked
+# ---- SDR WITH A CRISP HUD; MENUS IN PLACE
+SDR, VRR 120, the game at 50: the doubling with a crisp HUD     | hz=120 vrr=1 sdr=1 game=50     | OK
+a menu is up: frame generation stands by in place               | hz=120 vrr=1 game=50 menu=1    | FGC_MENU

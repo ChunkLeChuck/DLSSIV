@@ -1,0 +1,16 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: THE CURRENT FRAME'S SAMPLE ALONG THE GAME'S VECTOR, AS v-env RELIT IT (2026-10-27; round 9's tyre
+# desk, docs\reports\fg-5\desk-2026-10-27-tyres). On top of the product: every pixel of the generated image is that sample's colour
+# (the road the pixel should show where the frame before's sample is the tyre), and nothing is inpainted. The desk measures the
+# tyre's copy as how far a library's generated pixel lies from it where the frame before's sample is the tyre (copy.py there).
+what AN INSTRUMENT (the picture changes): every pixel is the current frame's sample along the game's vector as v-env relit it
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+--- new
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+        // (the instrument v-show-current)
+        fInterpolatedColor = fCurrColorGame.fRaw;
+        fInPaintingWeight  = 0.0f;
+--- end

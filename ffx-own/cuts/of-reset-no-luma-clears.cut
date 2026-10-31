@@ -1,0 +1,70 @@
+# AT A RESET OPTICAL FLOW NO LONGER CLEARS ITS FOURTEEN LUMINANCE IMAGES (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. A reset dispatch of optical flow begins with 18 clears: four of its scene-change images, and
+# the two sets of seven luminance images (the current frame's and the previous frame's pyramid: 3840x2160 down to
+# 60x34). 66 us of a reset dispatch's 230.
+#
+# WHO READS A LUMINANCE IMAGE, BY THE SOURCE (ffx_opticalflow.cpp at tag v2.3.0 and the seven pass files):
+#   - the prepare-luma pass writes level 0 of THE CURRENT set, every pixel, in every dispatch (786 to 793), and the
+#     pyramid pass writes its levels 1 to 6 from it (797 to 803): the current set's clear is overwritten whole before
+#     anything reads it;
+#   - the scene-change histogram reads the current set's level 0, after that;
+#   - the search and the scale read both sets, AND RETURN BEFORE THEY LOAD ANYTHING while optical flow's frame index is
+#     5 or less (ffx_opticalflow_callbacks_hlsl.h, IsSceneChanged: "if (FrameIndex() <= 5)"; the index is 0 at a reset
+#     and one more for each dispatch). The previous set of a reset dispatch is the current set of the dispatch after it,
+#     which writes it whole. By the sixth dispatch, the first that searches, both sets have been written whole five
+#     times.
+# So no load ever sees what the fourteen clears wrote. The four clears of the scene-change images stay: those are read.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts). A reset dispatch only: a steady pair
+# has no clear.
+what at a reset optical flow clears its four scene-change images and no longer its fourteen luminance images, which are written whole before anything reads them
+passes none
+wave64 it edits ffx_opticalflow.cpp, which runs on every device, and no shader: every variant's containers are unchanged by it
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1 Level 1");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1_LEVEL_1];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1 Level 2");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1_LEVEL_2];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1 Level 3");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1_LEVEL_3];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1 Level 4");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1_LEVEL_4];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1 Level 5");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1_LEVEL_5];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 1 Level 6");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_1_LEVEL_6];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2 Level 1");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2_LEVEL_1];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2 Level 2");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2_LEVEL_2];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2 Level 3");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2_LEVEL_3];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2 Level 4");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2_LEVEL_4];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2 Level 5");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2_LEVEL_5];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+        wcscpy_s(clearJob.jobLabel, L"Clear Optical Flow Input 2 Level 6");
+        clearJob.clearJobDescriptor.target = context->resources[FFX_OF_RESOURCE_IDENTIFIER_OPTICAL_FLOW_INPUT_2_LEVEL_6];
+        context->contextDescription.backendInterface.fpScheduleGpuJob(&context->contextDescription.backendInterface, &clearJob);
+--- new
+        // (the mod's cut of-reset-no-luma-clears: the fourteen luminance images are written whole before anything reads them)
+--- end

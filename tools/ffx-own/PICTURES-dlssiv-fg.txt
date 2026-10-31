@@ -1,0 +1,22 @@
+# THE PIN OF THE PRODUCT'S PICTURES (2026-10-12): what dlssiv-fg.dll, THE PRODUCT, generates on the judge's own pictures, by
+# one SHA-256 a configuration. The product's picture is its own since the owner accepted, in the game, cuts that change
+# it (ffx-own\cuts\CUTS.txt: "accepted"), so it is not held to AMD's any more: it is held to THIS. A change of its picture,
+# wanted or not, fails the judge (python tools\test-fg-own\run.py --ours, and its quick form --ours --pictures) until
+# somebody says it is wanted by making this file again.
+#     picture-cuts, picture-cuts-sha256   the accepted picture cuts this was made for (python tools\ffx-own\cuts.py; the
+#                                         proof with no device, tools\prove-ffx-own.py, holds these two)
+#     arms, pairs-an-arm                  the judge's arms and how many pairs of each were hashed
+#     <configuration> <pairs> <SHA-256>   of the lines "<arm> <index> <dispatches since the last reset> <the hash of the
+#                                         whole generated image, all four channels>", by arm and index, each ended by LF
+# AN EXACT CUT DOES NOT CHANGE THIS FILE: the product's pictures must still be these. NEVER EDITED BY HAND: python
+# tools\test-fg-own\run.py --ours --new-pictures writes it (the product's sessions twice, which must agree) and prints
+# what it replaced.
+picture-cuts 12
+picture-cuts-sha256 fc89bcf78ba2114a930b7666752f30b38cf75977dd52bc976b2822ea20d421f6
+arms F,FK,FR,F1,FN,FC,FS
+pairs-an-arm 48
+DF 336 e51964437c50ca8b6b0d210229b88ca64d63ad66113a18556ad65566fdb75d87
+QF 336 ff62173dbc890a80037f459c29bf17a2577f6ade1d2e938e0472841ff19053ed
+D8 336 2d99a5f4dacc57471bdfac5e3e7889c269e9ad21b77128a075bde0f91fe90ee1
+Q8 336 765469e421b8e018c386bae2ab52b33a7ab7d9f0e6b85ea572547e924112255f
+D3 336 e51964437c50ca8b6b0d210229b88ca64d63ad66113a18556ad65566fdb75d87

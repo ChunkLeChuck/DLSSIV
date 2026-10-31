@@ -1,0 +1,216 @@
+# THE POSITION OF THE GENERATED FRAME BETWEEN THE TWO REAL ONES, t, AS A CONSTANT OF THE DISPATCH (2026-10-17, frame generation
+# phase 5, package F3: docs\reports\fg-5\brief-fill\PLAN-fill.md, sections 0, A.1 and C).
+#
+# WHAT AMD'S CODE DOES. It generates the frame in THE MIDDLE of two real frames and writes that middle into the shaders of
+# the interpolate dispatch as numbers, in six places (none in the prepare): the game motion vector field and the optical
+# flow vector field scatter each vector to "the pixel plus half its vector" and store that half; the reconstruct-previous-
+# depth pass scatters the depth by the same half (no longer dispatched since the cut fi-depth-into-game-field, which does
+# its splat in the game field pass, from that pass's half); the disocclusion mask looks from the generated pixel toward the
+# previous frame by plus the stored vector, toward the current by minus it, and doubles it for the whole vector; the
+# interpolation pass fetches the two pictures at plus and minus the stored vector and blends them at 0.5 (with its
+# disocclusion correction), and blends optical flow's two at 0.5; and the common reads of the two fields test plus and
+# minus the stored vector against the screen.
+#
+# WHAT THIS CUT DOES. AMD's vectors point from the current frame to the previous one (MV). A frame at t (0 the previous
+# frame, 1 the current) shows a thing at "current place + MV * (1 - t)". So:
+#   - the two fields store S = MV * (1 - t) where AMD stores MV * 0.5, and scatter to "pixel + S" as AMD scatters to
+#     "pixel + half" (at t = 0.5 the very value AMD stores: 1 - 0.5 is 0.5 exactly);
+#   - from the generated pixel the current frame lies at MINUS S (AMD's own expression, unchanged), the previous frame at
+#     S * t / (1 - t) and the whole vector is S / (1 - t). NOTE: the plan wrote these two the other way round ("-stored x
+#     t / (1 - t)" toward the current); a frame at t near 1 must sample the current frame where it stands, which only
+#     this form does. The two factors are exactly 1 and 2 at t = 0.5 BY A TEST OF THE CONSTANT AND NOT BY A DIVISION
+#     (a device may divide 0.5 by 0.5 within its 2.5 units of the last place), so the middle is AMD's arithmetic on any
+#     device. Every factor at the middle is 0.5, 1 or 2: a product by a power of two is exact, so how the compiler
+#     orders or fuses the arithmetic changes no bit there;
+#   - the blend of the two pictures is t where AMD's is 0.5; where only one side is valid it is that side's (0 or 1, as
+#     AMD's); where neither is, it is t (AMD's 0.5 + 0.5 - 0.5); at the middle every case is AMD's value exactly; optical
+#     flow's blend is t where AMD's is 0.5.
+# THE CONSTANT is AMD's spare word of the constant buffer: "float _pad1" in the C struct, "FfxInt32 _pad1" in the HLSL
+# cbuffer (the same 4 bytes at the same offset), made a float on BOTH sides, fInterpolationPosition. AMD's dispatch
+# description gains a float, interpolationPosition (at the end of the struct); the constant is written from it at every
+# dispatch, AND IS 0.5 WHEN IT IS NOT INSIDE (0, 1) (0, the struct's zero, is AMD's middle: a caller that never sets it
+# gets AMD's frame). Our glue (define DLSSIV_FG_CUT_POSITION) reads the mod's own DlssivFgFrameDesc::position: 0 is the
+# middle, any other value is held within DLSSIV_FG_POSITION_LEAST and _MOST (0.2 and 0.8), a value that is not a number
+# is refused; the library then says interface 2 (ffx-own\glue\dlssiv_fg.h says what that is).
+# WHAT IT COSTS. Nothing at all in the C++ but one store; in the shaders a multiply by a constant where AMD multiplied by
+# a literal, and two tests of a constant that every thread of a wave reads alike. Measured by the stamps
+# (tools\test-fg-own\fgtime.cpp --position): the report of 2026-10-17 has the numbers.
+# WHAT IT DOES NOT DO. The product's accepted picture cut v-env still relights toward the middle (its envelopes are
+# fetched at plus and minus S and its blend leans to its own 0.5): at t = 0.5 that is its picture exactly, at another t it
+# is not yet position-aware. Nothing of the mod passes a position other than 0 (the middle) on 2026-10-17.
+# THE JUDGE: at t = 0.5 the exact library must equal the reference in every pair and the product's pictures must be the
+# pinned ones; the control control-position (the glue told 0.4 for the middle) must FAIL on every moving arm, or the
+# constant never reached the shaders (tools\test-fg-own\run.py --ours, step 6c).
+what the generated frame's position t between the two real frames is a constant of the dispatch (AMD's spare word, a float on both sides), 0.5 unless a caller says another
+passes ffx_frameinterpolation_reconstruct_and_dilate_pass, ffx_frameinterpolation_disocclusion_mask_pass, ffx_frameinterpolation_reconstruct_previous_depth_pass, ffx_frameinterpolation_setup_pass, ffx_frameinterpolation_game_motion_vector_field_pass, ffx_frameinterpolation_optical_flow_vector_field_pass, ffx_frameinterpolation_pass, ffx_frameinterpolation_compute_game_vector_field_inpainting_pyramid_pass, ffx_frameinterpolation_compute_inpainting_pyramid_pass, ffx_frameinterpolation_inpainting_pass, ffx_frameinterpolation_debug_view_pass
+wave64 it edits shader files both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from, the constant buffer every frame interpolation pass declares, and three lines of AMD's C++ that run on every device; no wave operation; not run here on a wave64 device
+define DLSSIV_FG_CUT_POSITION
+file framegeneration/fsr3/internal/ffx_frameinterpolation_private.h
+--- old
+    float    fTanHalfFOV;
+    float   _pad1;
+--- new
+    float    fTanHalfFOV;
+    float    fInterpolationPosition;    // (the mod's cut fi-position: AMD's spare word, where the generated frame stands between the two real ones)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_callbacks_hlsl.h
+--- old
+        FfxFloat32      fTanHalfFOV;
+        FfxInt32        _pad1;
+--- new
+        FfxFloat32      fTanHalfFOV;
+        FfxFloat32      fInterpolationPosition;    // (the mod's cut fi-position: AMD's spare word, a float as in the C struct)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_callbacks_hlsl.h
+--- old
+    FfxFloat32 TanHalfFoV()
+    {
+        return fTanHalfFOV;
+    }
+--- new
+    FfxFloat32 TanHalfFoV()
+    {
+        return fTanHalfFOV;
+    }
+
+    // (the mod's cut fi-position) WHERE THE GENERATED FRAME STANDS between the two real ones: 0 the previous, 1 the
+    // current, 0.5 AMD's middle. A field stores S = MV * (1 - t), the way from the current frame's place to the
+    // generated frame's; from the generated frame the current frame lies at minus S, the previous one at S times
+    // PositionToPrevious() and the whole vector is S times PositionWhole(): exactly 1 and 2 at the middle, by a test.
+    FfxFloat32 InterpolationPosition()
+    {
+        return fInterpolationPosition;
+    }
+
+    FfxFloat32 PositionStoredShare()
+    {
+        return 1.0f - fInterpolationPosition;
+    }
+
+    FfxFloat32 PositionToPrevious()
+    {
+        return (fInterpolationPosition == 0.5f) ? 1.0f : fInterpolationPosition / (1.0f - fInterpolationPosition);
+    }
+
+    FfxFloat32 PositionWhole()
+    {
+        return (fInterpolationPosition == 0.5f) ? 2.0f : 1.0f / (1.0f - fInterpolationPosition);
+    }
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+    const FfxFloat32x2 fMotionVectorHalf = fGameMotionVector * 0.5f;
+--- new
+    const FfxFloat32x2 fMotionVectorHalf = fGameMotionVector * PositionStoredShare();    // (the mod's cut fi-position: AMD's 0.5f; the name stays AMD's)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_optical_flow_vector_field.h
+--- old
+    FfxFloat32x2 fMotionVectorHalf = fOpticalFlowVector * 0.5f;
+--- new
+    FfxFloat32x2 fMotionVectorHalf = fOpticalFlowVector * PositionStoredShare();    // (the mod's cut fi-position: AMD's 0.5f; the name stays AMD's)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_previous_depth.h
+--- old
+    ReconstructPrevDepth(iPxPos, 1, fDilatedDepth, fMotionVector * 0.5f, RenderSize());
+--- new
+    ReconstructPrevDepth(iPxPos, 1, fDilatedDepth, fMotionVector * PositionStoredShare(), RenderSize());    // (the mod's cut fi-position: AMD's 0.5f)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    const FfxFloat32 fDepthClipInterpolatedToPrevious   = 1.0f - ComputeDepthClip(0, fDepthUv + gameMv.fMotionVector, fDilatedDepth);
+--- new
+    const FfxFloat32 fDepthClipInterpolatedToPrevious   = 1.0f - ComputeDepthClip(0, fDepthUv + gameMv.fMotionVector * PositionToPrevious(), fDilatedDepth);    // (the mod's cut fi-position)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    const FfxFloat32x2 fSrcMotionVector   = gameMv.fMotionVector * 2.0f;
+--- new
+    const FfxFloat32x2 fSrcMotionVector   = gameMv.fMotionVector * PositionWhole();    // (the mod's cut fi-position: AMD's 2.0f, the whole vector)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    InterpolationSourceColor fPrevColorGame = SampleTextureBilinear(false, fUvInScreenSpace, +gameMv.fMotionVector * fUvLetterBoxScale, DisplaySize()); // Get in previous frame buffer, the color of interpolated pixel
+--- new
+    InterpolationSourceColor fPrevColorGame = SampleTextureBilinear(false, fUvInScreenSpace, +gameMv.fMotionVector * PositionToPrevious() * fUvLetterBoxScale, DisplaySize()); // Get in previous frame buffer, the color of interpolated pixel (the mod's cut fi-position: toward the previous frame at t)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fPrevColorOF = SampleTextureBilinear(false, fUvInScreenSpace, +ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());
+--- new
+        fPrevColorOF = SampleTextureBilinear(false, fUvInScreenSpace, +ofMv.fMotionVector * PositionToPrevious() * fUvLetterBoxScale, DisplaySize());    // (the mod's cut fi-position)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        FfxFloat32 t = 0.5f;
+        t += 0.5f * (1 - (fDisocclusionFactor.x));
+        t -= 0.5f * (1 - (fDisocclusionFactor.y));
+--- new
+        // (the mod's cut fi-position: AMD's blend at 0.5 is the blend at t. One side valid: that side's, 0 or 1, as AMD's;
+        // neither: t. Every case at the middle is AMD's value exactly)
+        const FfxFloat32 fPosition = InterpolationPosition();
+        FfxFloat32 t = fPosition;
+        t += (1.0f - fPosition) * (1 - (fDisocclusionFactor.x)) * fDisocclusionFactor.y;
+        t -= fPosition * (1 - (fDisocclusionFactor.y)) * fDisocclusionFactor.x;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        FfxFloat32 ofT = 0.5f;
+
+        if (fPrevColorOF.fBilinearWeightSum > 0 && fCurrColorOF.fBilinearWeightSum > 0)
+        {
+            ofT = 0.5f;
+        }
+--- new
+        FfxFloat32 ofT = InterpolationPosition();    // (the mod's cut fi-position: AMD's 0.5f, here and below)
+
+        if (fPrevColorOF.fBilinearWeightSum > 0 && fCurrColorOF.fBilinearWeightSum > 0)
+        {
+            ofT = InterpolationPosition();
+        }
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_common.h
+--- old
+        vfElement.bInPainted            = true;
+    }
+
+    vfElement.bNegOutside = !IsUvInside(fUv - vfElement.fMotionVector);
+    vfElement.bPosOutside = !IsUvInside(fUv + vfElement.fMotionVector);
+--- new
+        vfElement.bInPainted            = true;
+    }
+
+    vfElement.bNegOutside = !IsUvInside(fUv - vfElement.fMotionVector);
+    vfElement.bPosOutside = !IsUvInside(fUv + vfElement.fMotionVector * PositionToPrevious());    // (the mod's cut fi-position)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_common.h
+--- old
+        vfElement.uLowPriorityFactor /= fWeightSum;
+    }
+
+    vfElement.bNegOutside = !IsUvInside(fUv - vfElement.fMotionVector);
+    vfElement.bPosOutside = !IsUvInside(fUv + vfElement.fMotionVector);
+--- new
+        vfElement.uLowPriorityFactor /= fWeightSum;
+    }
+
+    vfElement.bNegOutside = !IsUvInside(fUv - vfElement.fMotionVector);
+    vfElement.bPosOutside = !IsUvInside(fUv + vfElement.fMotionVector * PositionToPrevious());    // (the mod's cut fi-position)
+--- end
+file framegeneration/fsr3/include/ffx_frameinterpolation.h
+--- old
+    FfxApiResource                         distortionField;                    ///< A resource containing distortion offset data used when distortion post effects are enabled.
+} FfxFrameInterpolationDispatchDescription;
+--- new
+    FfxApiResource                         distortionField;                    ///< A resource containing distortion offset data used when distortion post effects are enabled.
+
+    float                               interpolationPosition;              ///< (the mod's cut fi-position) where the generated frame stands: 0 the previous frame, 1 the current; 0, or anything not inside (0, 1), is AMD's middle (0.5)
+} FfxFrameInterpolationDispatchDescription;
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    contextPrivate->constants.fTanHalfFOV               = tanf(cameraAngleHorizontal * 0.5f);
+--- new
+    contextPrivate->constants.fTanHalfFOV               = tanf(cameraAngleHorizontal * 0.5f);
+    // (the mod's cut fi-position) where the generated frame stands, into AMD's spare word: the middle unless it is inside (0, 1)
+    contextPrivate->constants.fInterpolationPosition    = (params->interpolationPosition > 0.0f && params->interpolationPosition < 1.0f) ? params->interpolationPosition : 0.5f;
+--- end

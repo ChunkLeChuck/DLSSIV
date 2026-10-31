@@ -1,0 +1,25 @@
+# A VARIANT, NEVER THE PRODUCT: THE TYRE THAT BOUNCED, FOUND ALSO WHERE THE ROAD AT ITS FOOT LIES NEARER THAN 2 PERCENT (2026-10-28; the tyre's
+# leftovers, docs\reports\fg-5\desk-2026-10-28-tyre-leftovers\FINDINGS.md). ON TOP OF THE PRODUCT (it changes one number of v-hide-reach). IT
+# CHANGES THE PICTURE ONLY WHERE v-hide-reach'S BOUNCE TEST FAILED ON ITS DEPTH ALONE.
+#
+# THE OWNER'S SYMPTOM (2026-10-28, on the build with round 9's tyre fix): "yes I can still see it sometimes": a thin dark line at the
+# very foot of the tyre in generated frames.
+# WHAT THE PRODUCT DOES THERE. The tyre bounces up between the two real frames (4 to 5 px in the capture of 2026-10-27, run 5). The road
+# just under its new foot shows, in the frame before, the tyre's lowest rows. v-hide-reach looks REACH px above the fetch place for a thing
+# that stays and whose own vector puts it on the fetch place in the frame before, and calls the frame before's sample hidden there, but
+# only if that thing is not farther than the pixel by more than REACH_DEPTH (2 percent). At the contact rows the interpolated frame's
+# depth at the pixel is more than 2 percent nearer than the tyre's foot above the fetch place (v-show-hide on run 5, its twelve generated
+# frames: of the line's 1,469 pixels with the frame before's sample visible, 739 fail the depth test alone; most of the rest lie more than
+# 4 px under the bounced foot, where the bounce's read finds road), so the tyre's foot is blended in: a dark line 1 to 3 rows tall.
+# THE CUT: REACH_DEPTH from 0.02 to 0.06 (the rest of the bounce's test, a thing that stays, whose own vector puts it on the fetch place
+# within 3 px, is unchanged). No read, no instruction more. On run 5 the line's pixels 122 to 71 a generated frame, its mass 69 to 23; on
+# the 14 other DLAA runs leftover2.py's classes are the product's (G1 run 3, the whole frame: 2 pixels a frame differ).
+what A VARIANT (the picture changes): v-hide-reach's bounce test takes a thing above the fetch place up to 6 percent farther than the pixel (it took 2)
+passes ffx_frameinterpolation_disocclusion_mask_pass
+wave64 the same edit in both variants: no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+FFX_STATIC const FfxFloat32 REACH_DEPTH = 0.02f;   // the thing may lie this share farther than the pixel
+--- new
+FFX_STATIC const FfxFloat32 REACH_DEPTH = 0.06f;   // the thing may lie this share farther than the pixel (the variant v-reach-nearer: 0.02 before)
+--- end

@@ -1,0 +1,37 @@
+# A CONTROL, NEVER A CUT OF THE PRODUCT (2026-10-10, the own build's stage 3, the judge's new control).
+# The judge of stage 3 says "equal" by the hash of the whole generated image. That proves something only if a library
+# whose picture differs in ONE PIXEL would have been caught. This is that library's change: the last pass that writes
+# the generated image (the inpainting pass, which runs on every dispatch, a reset too) changes the red of the one pixel
+# (1001, 601), on every generated frame, and writes it. Halving a value above 0.25 and adding 0.25 to any other
+# always gives another value, in a half float as in an 8-bit channel. build-ffx-own.ps1 -Target dlssiv-fg -TestName px
+# builds it on top of the product's cuts (dlssiv-fg-px.dll); tools\test-fg-own\run.py --ours must FAIL on it on every
+# pair, and its whole-image compare must say that exactly one pixel differs.
+# SINCE THE CUT fi-inpainting-by-blocks IS IN THE PRODUCT (2026-10-10) the pass calls AMD's function only for a pixel it
+# can change, so this control has a second edit, of that cut's own line: the pass also calls it for the pixel
+# (1001, 601), on every frame (in the cut's block form; where the pass runs a thread a pixel the first edit is met anyway). The control is built on top of the product's cuts and needs that cut to be among them.
+what THE JUDGE'S CONTROL: the red of the one pixel (1001, 601) of every generated image is changed in the last pass
+passes ffx_frameinterpolation_inpainting_pass
+wave64 it changes a shader file both variants are compiled from; it is a control and is never in the product
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_inpainting.h
+--- old
+    if (bWriteColor)
+    {
+        StoreFrameinterpolationOutput(iPxPos, FfxFloat32x4(fInterpolatedColor.rgb, 1.0f));
+    }
+--- new
+    if (all(FFX_EQUAL(iPxPos, FfxInt32x2(1001, 601))))
+    {
+        fInterpolatedColor.r = (fInterpolatedColor.r > 0.25f) ? fInterpolatedColor.r * 0.5f : fInterpolatedColor.r + 0.25f;
+        bWriteColor = true;
+    }
+    if (bWriteColor)
+    {
+        StoreFrameinterpolationOutput(iPxPos, FfxFloat32x4(fInterpolatedColor.rgb, 1.0f));
+    }
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_inpainting_pass.hlsl
+--- old
+                if (rw_inpainting_mask[iPx] > FFX_FRAMEINTERPOLATION_EPSILON)
+--- new
+                if (all(FFX_EQUAL(iPx, FfxInt32x2(1001, 601))) || rw_inpainting_mask[iPx] > FFX_FRAMEINTERPOLATION_EPSILON)
+--- end

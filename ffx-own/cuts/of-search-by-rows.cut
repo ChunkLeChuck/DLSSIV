@@ -1,0 +1,181 @@
+# OPTICAL FLOW'S SEARCH, ONE THREAD FOR A ROW OF THE SEARCH (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. For every 8 by 8 block the search tries all 256 offsets of a 16 by 16 window and keeps the one
+# with the smallest sum of absolute differences (and, at the finest level, no offset at all when that is no worse). A
+# group of 64 threads handles four blocks ONE AFTER THE OTHER; for each, a thread computes FOUR of the 256 sums (one
+# search row, four neighbouring columns). On a card whose waves are not 64 lanes wide the sums are plain arithmetic
+# (AMD's own remark in ffx_opticalflow_callbacks_hlsl.h: "perf optimization for h/w not supporting accelerated
+# msad4()"), and the pass is bound by that arithmetic: the two cuts that removed its group barriers and its repeated
+# stores changed nothing (of-search-reductions, of-search-one-store: within 2 us of 369).
+# For its four sums a thread takes apart, for each of the block's 8 rows, 8 bytes of the block and 11 of the window:
+# 19 bytes for 32 differences. That overhead and the loop's own are a third of the arithmetic.
+#
+# THE CUT, FOR THE PLAIN-ARITHMETIC PATH ONLY (the cs_6_2 variant; the msad4 path of the wave64 variant is AMD's, line
+# for line). The group handles its four blocks AT ONCE: 16 threads a block, and a thread computes a WHOLE ROW of the
+# search, 16 sums, for which it takes apart 8 bytes of the block and 23 of the window a row: 31 bytes for 128
+# differences. The 16 threads of a block lie in one wave when a wave is 32 or 64 lanes wide, so the two reductions (the
+# smallest packed sum, and the block's own sum for the fallback) are wave reductions and nothing is exchanged between
+# waves. Everything is whole-number arithmetic on the same loads:
+#   - the same four predictions, the same four windows (LoadSecondImagePackedLuma at the same positions), the same 64
+#     words of the block (LoadFirstImagePackedLuma at the same positions);
+#   - each of the 256 sums is the sum of the same 64 absolute differences;
+#   - each is packed with its offset by AMD's EncodeSearchCoord, and the minimum of the 256 packed words is taken (a
+#     minimum does not depend on the order);
+#   - the fallback's sum, the test against it, the decoded vector and the cell it is stored in are AMD's.
+# On a card whose waves are neither 32 nor 64 lanes wide AMD's own code runs, untouched (the test is the first thing
+# the pass does): nothing changes on a device this was not measured on.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what optical flow's search (O4 to O6), plain-arithmetic path: a group's four blocks at once, one thread computing a whole row of the search (16 sums) instead of four sums, with wave reductions alone
+passes ffx_opticalflow_compute_optical_flow_advanced_pass_v5
+wave64 it edits the search's file; the cs_6_6 variant WITH [WaveSize(64)] compiles AMD's msad4 path, which the cut leaves line for line (its containers change by their source hash alone); the new path is compiled into the cs_6_2 variant only and taken only on 32 or 64 lanes
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+void ComputeOpticalFlowAdvanced(FfxInt32x2 iGlobalId, FfxInt32x2 iLocalId, FfxInt32x2 iGroupId, FfxInt32 iLocalIndex)
+{
+    FfxInt32x2 iSearchId;
+--- new
+#if FFX_OPTICALFLOW_USE_MSAD4_INSTRUCTION != 1
+// (the mod's cut of-search-by-rows) THE SEARCH OF A GROUP'S FOUR BLOCKS AT ONCE, for the plain-arithmetic path.
+// Thread i works for block i >> 4 and computes the search's row i & 15: sixteen sums. See the cut's file for why every
+// number is AMD's.
+FFX_GROUPSHARED FfxUInt32 rowPixels[BlockCount * BlockCount][CompareSize][CompareSize / 4];
+FFX_GROUPSHARED FfxUInt32 rowSearch[BlockCount * BlockCount][SearchBufferSizeY * SearchBufferSizeX];
+
+void ComputeOpticalFlowByRows(FfxInt32x2 iGroupId, FfxInt32 iLocalIndex)
+{
+    const FfxInt32   iBlock           = iLocalIndex >> 4;
+    const FfxInt32   iRow             = iLocalIndex & 15;
+    const FfxInt32x2 blockId          = FfxInt32x2(iBlock & 1, iBlock >> 1);
+    const FfxInt32x2 ofGroupOffset    = iGroupId << 1u;
+    const FfxInt32x2 pixelGroupOffset = iGroupId << 4u;
+
+    if (IsSceneChanged())
+    {
+        if (iRow == 0)
+        {
+            StoreOpticalFlow(ofGroupOffset + blockId, FfxInt32x2(0, 0));
+        }
+
+        return;
+    }
+
+    const FfxBoolean bUsePredictionFromPreviousLevel = (OpticalFlowPyramidLevel() != OpticalFlowPyramidLevelCount() - 1);
+
+    // this thread's word of its block (four pixels of the first image), and the fallback's differences on it
+    const FfxInt32x2 iWordPos = pixelGroupOffset + blockId * 8 + FfxInt32x2((iRow & 1) * 4, iRow >> 1);
+    const FfxUInt32  uFirst   = LoadFirstImagePackedLuma(iWordPos);
+    rowPixels[iBlock][iRow >> 1][iRow & 1] = uFirst;
+    const FfxUInt32  uOwnSad  = Sad(uFirst, LoadSecondImagePackedLuma(iWordPos));
+
+    // the four predictions, and the four search windows: 4 times 144 words, loaded by the 64 threads
+    FfxInt32x2 vectors[BlockCount * BlockCount];
+    for (FfxInt32 k = 0; k < BlockCount * BlockCount; k++)
+    {
+        vectors[k] = LoadRwOpticalFlow(ofGroupOffset + FfxInt32x2(k & 1, k >> 1));
+        if (!bUsePredictionFromPreviousLevel)
+        {
+            vectors[k] = FfxInt32x2(0, 0);
+        }
+    }
+    for (FfxInt32 id = iLocalIndex; id < BlockCount * BlockCount * SearchBufferSizeX * SearchBufferSizeY; id += ThreadCount)
+    {
+        const FfxInt32   k    = id / (SearchBufferSizeX * SearchBufferSizeY);
+        const FfxInt32   w    = id % (SearchBufferSizeX * SearchBufferSizeY);
+        const FfxInt32x2 base = pixelGroupOffset + FfxInt32x2(k & 1, k >> 1) * 8 + vectors[k] - FfxInt32x2(SearchRadiusX, SearchRadiusY);
+        rowSearch[k][w] = LoadSecondImagePackedLuma(FfxInt32x2(base.x + (w % SearchBufferSizeX) * 4, base.y + w / SearchBufferSizeX));
+    }
+    FFX_GROUP_MEMORY_BARRIER;
+
+    // sixteen sums of absolute differences: this thread's row of the search, every column
+    FfxUInt32 sads[SearchRadiusX * 2];
+    FFX_UNROLL
+    for (FfxInt32 x0 = 0; x0 < SearchRadiusX * 2; x0++)
+    {
+        sads[x0] = 0u;
+    }
+    for (FfxInt32 dy = 0; dy < CompareSize; dy++)
+    {
+        const FfxInt32 rowOffset = (iRow + dy) * SearchBufferSizeX;
+        FfxInt32 s[SearchBufferSizeX * 4];
+        FFX_UNROLL
+        for (FfxInt32 n = 0; n < SearchBufferSizeX; n++)
+        {
+            const FfxUInt32 a = rowSearch[iBlock][rowOffset + n];
+            s[n * 4 + 0] = FfxInt32((a >> 0) & 0xffu);
+            s[n * 4 + 1] = FfxInt32((a >> 8) & 0xffu);
+            s[n * 4 + 2] = FfxInt32((a >> 16) & 0xffu);
+            s[n * 4 + 3] = FfxInt32((a >> 24) & 0xffu);
+        }
+        FfxInt32 p[CompareSize];
+        FFX_UNROLL
+        for (FfxInt32 m = 0; m < CompareSize / 4; m++)
+        {
+            const FfxUInt32 b = rowPixels[iBlock][dy][m];
+            p[m * 4 + 0] = FfxInt32((b >> 0) & 0xffu);
+            p[m * 4 + 1] = FfxInt32((b >> 8) & 0xffu);
+            p[m * 4 + 2] = FfxInt32((b >> 16) & 0xffu);
+            p[m * 4 + 3] = FfxInt32((b >> 24) & 0xffu);
+        }
+        FFX_UNROLL
+        for (FfxInt32 x = 0; x < SearchRadiusX * 2; x++)
+        {
+            FfxUInt32 rowSad = 0u;
+            FFX_UNROLL
+            for (FfxInt32 j = 0; j < CompareSize; j++)
+            {
+                rowSad += FfxUInt32(abs(s[x + j] - p[j]));
+            }
+            sads[x] += rowSad;
+        }
+    }
+
+    // the smallest of this thread's sixteen packed sums (AMD's PrepareSadMap packs them the same way)
+    FfxUInt32 uOwnMin = 0xFFFFFFFFu;
+    FFX_UNROLL
+    for (FfxInt32 x1 = 0; x1 < SearchRadiusX * 2; x1++)
+    {
+        uOwnMin = ffxMin(uOwnMin, (sads[x1] << 16) | EncodeSearchCoord(FfxInt32x2(x1, iRow)));
+    }
+
+    // over the block's sixteen threads, which share a wave: the smallest packed sum, and the block's own sum
+    FfxUInt32 minSad      = 0xFFFFFFFFu;
+    FfxUInt32 blockSadSum = 0u;
+    for (FfxInt32 b0 = 0; b0 < BlockCount * BlockCount; b0++)
+    {
+        const FfxUInt32 uWaveMin = ffxWaveMin((iBlock == b0) ? uOwnMin : 0xFFFFFFFFu);
+        const FfxUInt32 uWaveSad = ffxWaveSum((iBlock == b0) ? uOwnSad : 0u);
+        if (iBlock == b0)
+        {
+            minSad      = uWaveMin;
+            blockSadSum = uWaveSad;
+        }
+    }
+
+    FfxInt32x2 newVector = vectors[iBlock] + DecodeSearchCoord(minSad);
+#if FFX_LOCAL_SEARCH_FALLBACK == 1
+    if (OpticalFlowPyramidLevel() == 0 && blockSadSum <= (minSad >> 16u))
+    {
+        newVector = FfxInt32x2(0, 0);
+    }
+#endif //FFX_LOCAL_SEARCH_FALLBACK
+
+    if (iRow == 0)
+    {
+        StoreOpticalFlow(ofGroupOffset + blockId, newVector);
+    }
+}
+#endif // FFX_OPTICALFLOW_USE_MSAD4_INSTRUCTION != 1
+
+void ComputeOpticalFlowAdvanced(FfxInt32x2 iGlobalId, FfxInt32x2 iLocalId, FfxInt32x2 iGroupId, FfxInt32 iLocalIndex)
+{
+#if FFX_OPTICALFLOW_USE_MSAD4_INSTRUCTION != 1
+    // (the mod's cut of-search-by-rows: the plain-arithmetic path, where a block's sixteen threads share a wave)
+    if (ffxWaveLaneCount() == 32 || ffxWaveLaneCount() == 64)
+    {
+        ComputeOpticalFlowByRows(iGroupId, iLocalIndex);
+        return;
+    }
+#endif
+    FfxInt32x2 iSearchId;
+--- end

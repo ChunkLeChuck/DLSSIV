@@ -1,0 +1,23 @@
+# THE RECORD OF THE EXACT LIBRARY OF THE OWN BUILD: dlssiv-fg-exact.dll, THE EXACT CUTS AND NO PICTURE CUT (ffx-own\cuts\CUTS.txt:
+# the cuts marked "in"; build-ffx-own.ps1 -Target dlssiv-fg builds it in every run, between the reference and the
+# product, into obj\dlssiv-fg-exact). It is what the product was until 2026-10-12, byte for byte: THE LIBRARY THE JUDGE
+# HOLDS, PAIR BY PAIR, TO THE REFERENCE WITH NO CUT AND TO AMD'S SIGNED LIBRARY (tools\test-fg-own\run.py --ours), which is
+# the proof that an exact cut is exact. "library" is THE FILE'S NAME; the bytes call themselves dlssiv-fg.dll inside,
+# as they did when they were the product. NEVER THE PRODUCT'S FILE: nothing installs or packages it. The keys are
+# RECORD-dlssiv-fg-cut.txt's. NEVER EDITED BY HAND: python tools\prove-ffx-own.py --new-record-exact writes it and
+# prints what it replaced.
+library dlssiv-fg-exact.dll
+size 800768
+sha256 3986ba659a707dd8220b3375cf7f32ceb1f38458b004b7cd4d950d1bdf2b1fae
+cl 19.44.35228
+link 14.44.35228.0
+windows-sdk 10.0.26100.0
+dxc 1.8.2502.11
+headers 72
+headers-sha256 d029c64fa53eb30f5f2c33c5c3b20d3b0e5ee22bcde8155031963c89bf2e70bc
+manifest-rows 98
+manifest-sha256 7d00456d94e33433cddf6506ee4b49b7881d1341476599243ce43c34ba4b43f6
+cuts 15
+cuts-sha256 4743e1a995ee0830f71bd86acaceb5eeb4452d832fe55875a9bdf0e94400da29
+cut-headers 25
+cut-headers-sha256 4aac8a1d624a343a75fa18710cd6f99105f35a77baafb2b72c7aa83b0132fae7

@@ -1,0 +1,101 @@
+# WITH A HUD-LESS IMAGE, THE INPAINTING PASS KEEPS THE PICTURE FOR THE NEXT PAIR AND LOADS THE GENERATED COLOUR ONLY WHERE IT MAY
+# CHANGE IT (2026-10-12, the last exact cut of phase 3: docs\reports\fg-3\sitting-2026-10-12\BRIEF-lib4.md, part 3).
+#
+# WHAT AMD'S CODE DOES. With a HUD-less image attached the last pass runs one thread a pixel and loads three whole
+# pictures of the display's size: the generated colour, the HUD-less picture and the presented one. It changes a pixel
+# in two cases only: the inpainting weight asks for it, or the two pictures differ there (the interface). Then, as the
+# dispatch's last job, AMD COPIES THE HUD-LESS PICTURE WHOLE into the image it keeps for the next pair's interpolation
+# (the "previous interpolation source"): the same 63 MiB read once more and written.
+# On the three-image set the pass takes 85 us and the copy 41 where the two-image set's block form takes 19 and 58
+# (docs\reports\fg-3\after-sitting-2026-10-11\REPORT-cuts-leftover.md).
+#
+# THE CUT, for a dispatch with a HUD-less image, no debug drawing, and 16-bit float pictures (the mod's HDR shape; the
+# dispatch says so to the pass by one bit of its own in the dispatch flags, which AMD's shaders only test bit by bit):
+#   1. A thread loads the HUD-less pixel (it needs it for the comparison) AND STORES IT into the image kept for the
+#      next pair. AMD's copy at the dispatch's end is then not scheduled: every pixel of the picture was stored (the
+#      pass covers the display rounded up to eight; a 16-bit float is loaded and stored without a change of a bit).
+#   2. It loads the presented pixel and the inpainting weight (one small value), and calls AMD's function, unchanged,
+#      only where the weight asks for inpainting or the two pictures differ. For every other pixel AMD's function
+#      loads three values and stores nothing: not calling it changes nothing, and the generated colour is not loaded.
+# In every other dispatch (no HUD-less image; a debug drawing; pictures of another format, where a load and a store
+# were not judged) the pass and the copy run as before.
+#
+# MEASURED: see docs\reports\fg-3\sitting-2026-10-12\lib4 (the price and the judge's line).
+what the inpainting pass (I10), with a HUD-less image of 16-bit floats and no debug drawing, stores the HUD-less pixel for the next pair itself (AMD's whole copy at the dispatch's end is not scheduled) and calls AMD's function only for a pixel it can change
+passes ffx_frameinterpolation_inpainting_pass
+wave64 it edits the pass's file, which both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from, and the dispatch in ffx_frameinterpolation.cpp, which runs on every device; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_callbacks_hlsl.h
+--- old
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK
+--- new
+// (the mod's cut fi-inpainting-keeps-the-source) the image kept for the next pair's interpolation, written by the inpainting pass
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_PREVIOUS_INTERPOLATION_SOURCE
+    RWTexture2D<FfxFloat32x4> rw_previous_interpolation_source FFX_DECLARE_UAV(FFX_FRAMEINTERPOLATION_BIND_UAV_PREVIOUS_INTERPOLATION_SOURCE);
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_inpainting_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_INPAINTING_MASK                         1
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_INPAINTING_MASK                         1
+// (the mod's cut fi-inpainting-keeps-the-source)
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_PREVIOUS_INTERPOLATION_SOURCE           2
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_inpainting_pass.hlsl
+--- old
+    // (the mod's cut fi-inpainting-by-blocks) with a HUD-less image attached or a debug drawing asked for, AMD's function
+--- new
+    // (the mod's cut fi-inpainting-keeps-the-source) where the dispatch says so (a HUD-less image of 16-bit floats, no debug
+    // drawing: bit 30 of the dispatch flags, set by ffx_frameinterpolation.cpp and by nothing else): the HUD-less pixel
+    // is stored for the next pair, which AMD's copy at the dispatch's end did, and AMD's function is called only for
+    // a pixel it can change: one whose weight asks for inpainting or where the two pictures differ
+    if ((GetDispatchFlags() & 0x40000000u) != 0)
+    {
+        const FfxFloat32x4 fSource = r_current_interpolation_source[iPxPos];
+        rw_previous_interpolation_source[iPxPos] = fSource;
+        if (rw_inpainting_mask[iPxPos] > FFX_FRAMEINTERPOLATION_EPSILON
+            || any(FFX_GREATER_THAN(abs(fSource.rgb - LoadPresentBackbuffer(iPxPos).rgb), FfxFloat32x3(0.0, 0.0, 0.0))))
+        {
+            computeInpainting(iPxPos);
+        }
+        return;
+    }
+    // (the mod's cut fi-inpainting-by-blocks) with a HUD-less image attached or a debug drawing asked for, AMD's function
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_INPAINTING_MASK,                            L"rw_inpainting_mask"},
+--- new
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_INPAINTING_MASK,                            L"rw_inpainting_mask"},
+    // (the mod's cut fi-inpainting-keeps-the-source)
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_PREVIOUS_INTERPOLATION_SOURCE,              L"rw_previous_interpolation_source"},
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    contextPrivate->constants.dispatchFlags         = params->flags;
+--- new
+    contextPrivate->constants.dispatchFlags         = params->flags;
+    // (the mod's cut fi-inpainting-keeps-the-source) with a HUD-less image of 16-bit floats and no debug drawing the inpainting
+    // pass stores the HUD-less picture for the next pair, pixel by pixel, and the copy at this dispatch's end is not
+    // scheduled. The pass is told by bit 30 of the dispatch flags (AMD's flags are bits 0 to 3; its shaders test bits).
+    const bool inpaintingKeepsSource = contextPrivate->constants.HUDLessAttachedFactor == 1
+        && (params->flags & (FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_TEAR_LINES | FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_RESET_INDICATORS | FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_VIEW)) == 0
+        && contextPrivate->contextDescription.previousInterpolationSourceFormat == FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT
+        && params->currentBackBuffer_HUDLess.description.format == FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT;
+    if (inpaintingKeepsSource)
+    {
+        contextPrivate->constants.dispatchFlags |= 0x40000000u;
+    }
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+        // store current buffer
+        {
+--- new
+        // store current buffer
+        // (the mod's cut fi-inpainting-keeps-the-source: where the inpainting pass stored it, there is nothing left to copy)
+        if (!inpaintingKeepsSource)
+        {
+--- end

@@ -1,0 +1,72 @@
+# A VARIANT, NEVER THE PRODUCT: THE BAND AT THE SCREEN'S EDGE WHERE THE FRAME AFTER'S SAMPLE LIES OFF THE SCREEN (2026-10-25;
+# the desk study docs\reports\fg-5\desk-2026-10-25-edge\READING.md, its mode place3, and FIX.md beside it for this cut's
+# numbers). ON TOP OF THE PRODUCT (v-env and v-env-position in their text). IT CHANGES THE PICTURE, IN THAT BAND ONLY.
+#
+# THE OWNER'S SYMPTOM: when the car's shadow reaches the bottom edge of the screen, the generated frames show a broken or
+# smeared patch there that is not a trailing ghost.
+# WHAT THE PRODUCT DOES THERE. Where the ground streams toward an edge, the current frame's sample (fetched at minus S) lies
+# off the screen for |S| pixels from that edge (20 to 73 rows at the bottom on the capture of 2026-10-25): its weights sum to
+# 0, and AMD's code takes the previous frame's sample alone. Open ground is right there. A light that stays on the screen
+# (the car's shadow) is not: the lone sample brings the light of the place it was fetched from, whole where v-env's gate
+# stays shut, relit texel by texel where it opens, and nothing weighs it against a second sample.
+# THE CUT, one weight more for the product's own inpainting (v-no-inpainting-pyramid: "the newer real frame's pixel at its
+# place, by the weight"): where the current frame's sample is off the screen (any edge: the same test), THE CURRENT FRAME'S
+# OWN PIXEL AT THE PLACE stands in for it, by smoothstep(ENV_EDGE_0, ENV_EDGE_1, |n|) times v-env's fGrown, n the previous
+# sample's need of brightness gain (envOne's fNeeded before its gate, the very expression envRelight computes). That
+# pixel is the place's own light: from a factor 1.4 to 2 of light the lone sample does not hold, the place's pixel is
+# believed. Elsewhere the weight is not set: the product's picture, bit for bit (FIX.md has the replay that holds it).
+# THE FORM, BY ITS PRICE (FIX.md): the need is READ AGAIN IN THE BAND'S BRANCH ALONE (envEdge: two envelope fetches and
+# envRelight's own expressions, for the band's pixels only). Handing it out of envRelight cost the interpolation pass 8 to
+# 10 us (on every pixel: run 5 as much as run 1; my reading, not proved: two values kept alive across optical flow's
+# fetches); setting the weight right after envRelight 2 to 3; this form 1 to 3, and the least whole list. The inpainting
+# pass then takes the current frame's pixel for the pixels the weight lands on: 2 to 6 us.
+what the band at an edge where the current frame's sample is off the screen: the current frame's own pixel at the place, by the previous sample's need of brightness gain (v-env's), through the product's inpainting weight
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FFX_STATIC const FfxFloat32 ENV_LEAST         = 0.02f;      // the tint is fetched where a sample's brightness is believed more than this
+--- new
+FFX_STATIC const FfxFloat32 ENV_LEAST         = 0.02f;      // the tint is fetched where a sample's brightness is believed more than this
+FFX_STATIC const FfxFloat32 ENV_EDGE_0        = 0.35f;      // (the variant v-edge) the current frame's pixel at the place: nothing where the lone sample's gain is under this (log)
+FFX_STATIC const FfxFloat32 ENV_EDGE_1        = 0.7f;       // whole from this on (log 2)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- new
+// (the variant v-edge) THE CURRENT FRAME'S PIXEL AT THE PLACE, where the current frame's sample is off the screen: its weight,
+// by the previous sample's need of brightness gain (envRelight's own numbers, read again here for the band's pixels alone)
+FfxFloat32 envEdge(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv)
+{
+    const FfxFloat32x2 fSize  = FfxFloat32x2(DisplaySize());
+    const FfxFloat32x2 fHalf  = fHalfUv * (PositionWhole() * 0.5f) * fSize;
+    FfxFloat32 fGrown = ffxSaturate((FfxFloat32(FrameIndexSinceLastReset()) - ENV_FRAME_0) / (ENV_FRAME_1 - ENV_FRAME_0));
+    fGrown *= smoothstep(ENV_MOVED_0 * ENV_MOVED_0, ENV_MOVED_1 * ENV_MOVED_1, dot(fHalf, fHalf));
+    if (fGrown <= 0.0f || (fHalfUv.x == 0.0f && fHalfUv.y == 0.0f))
+    {
+        return 0.0f;
+    }
+    const FfxFloat32x2 fScale = fSize / FfxFloat32x2(((DisplaySize() + (ENV_TEXEL - 1)) / ENV_TEXEL) * ENV_TEXEL);
+    FfxFloat32 fNeeded;
+    envOne(SampleEnvCurrent(fUv * fScale), SampleEnvCurrent((fUv + fHalfUv * PositionToPrevious()) * fScale), ENV_GAIN_MOST, fNeeded);
+    return smoothstep(ENV_EDGE_0, ENV_EDGE_1, abs(fNeeded)) * fGrown;
+}
+
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        else if (fCurrColorGame.fBilinearWeightSum == 0.0f)
+        {
+            fInterpolatedColor = fPrevColorGame.fRaw;
+        }
+--- new
+        else if (fCurrColorGame.fBilinearWeightSum == 0.0f)
+        {
+            fInterpolatedColor = fPrevColorGame.fRaw;
+            // (the variant v-edge) the current frame's sample is off the screen: its own pixel at the place stands in, by
+            // how much light the lone sample does not hold (the inpainting pass takes it by this weight)
+            updateInPaintingWeight(fInPaintingWeight, envEdge(fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale));
+        }
+--- end

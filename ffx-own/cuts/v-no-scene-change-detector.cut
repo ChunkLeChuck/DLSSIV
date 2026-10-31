@@ -1,0 +1,25 @@
+# A VARIANT, NEVER THE PRODUCT: NO SCENE CHANGE DETECTOR (2026-10-11; stage 3's report, "For stage 5", item 6: "the
+# scene-change detector replaced", O3 is 23 us). IT CHANGES THE PICTURE ON A FRAME THE DETECTOR WOULD HAVE CALLED A SCENE
+# CHANGE, and on the four after it. Built only into a variant library (build-ffx-own.ps1 -Variant).
+#
+# Optical flow compares nine luma histograms of the picture with the last frame's and, where they diverge, calls the
+# frame a scene change: the search then writes "no motion" and the interpolation's setup treats the frame as a reset.
+# HERE THE TWO PASSES ARE NOT RUN. The detector's output image keeps the zero a reset clears it to ("no change"), so the
+# only scene change the library knows is the reset the mod itself sends (a cut, a load, a menu: the mod's own job).
+what A VARIANT (the picture changes where the detector fires): optical flow's scene change histogram and divergence (O3) are not run; the only scene change is the reset the mod sends
+passes none
+wave64 no shader changes: two dispatches are not scheduled
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+                    scheduleDispatch(context, &context->pipelineGenerateSCDHistogram, L"OF GenerateSCDHistogram", dispatchX, dispatchY, dispatchZ);
+--- new
+                    // (the variant v-no-scene-change-detector: not run)
+                    (void)dispatchX; (void)dispatchY; (void)dispatchZ;
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+                    scheduleDispatch(context, &context->pipelineComputeSCDDivergence, L"OF ComputeSCDDivergence", dispatchX, dispatchY);
+--- new
+                    // (the variant v-no-scene-change-detector: not run)
+                    (void)dispatchX; (void)dispatchY;
+--- end

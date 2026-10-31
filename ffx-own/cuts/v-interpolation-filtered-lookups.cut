@@ -1,0 +1,55 @@
+# A VARIANT, NEVER THE PRODUCT: THE INTERPOLATION'S LOOKUPS BY THE CARD'S OWN FILTER (2026-10-11; stage 3's report,
+# "For stage 5", item 2). IT CHANGES THE PICTURE. Built only into a variant library (build-ffx-own.ps1 -Variant).
+#
+# The interpolation pass (I8) reads the previous and the current picture along the game's vector and along optical
+# flow's: up to four lookups a pixel, each four loads weighted by hand, with a sample outside the interpolation
+# rectangle left out and the rest weighted up. HERE each lookup is ONE filtered sample (AMD's own linear, clamped
+# sampler, which the pass already has). What differs: the card filters with weights of 8 bits; and at the rectangle's
+# edge the outermost texel is repeated where AMD weights the inner ones up (the same value at the picture's edge, since
+# the rectangle is the picture in this mod). A lookup that lies wholly outside still counts as no sample.
+what A VARIANT (the picture changes): the interpolation pass (I8) reads each of its lookups as one sample filtered by the card (weights of 8 bits) instead of four loads weighted by hand
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    BilinearSamplingData bilinearInfo = GetBilinearSamplingData(fReprojectedUv, texSize);
+
+    FfxFloat32x3 fColor = FfxFloat32x3(0.0, 0.0, 0.0);
+    FfxFloat32 fWeightSum = 0.0f;
+    for (FfxInt32 iSampleIndex = 0; iSampleIndex < 4; iSampleIndex++) {
+
+        const FfxInt32x2 iOffset = bilinearInfo.iOffsets[iSampleIndex];
+        const FfxInt32x2 iSamplePos = bilinearInfo.iBasePos + iOffset;
+
+        if (IsInRect(iSamplePos, InterpolationRectBase(), InterpolationRectSize()))
+        {
+            FfxFloat32 fWeight = bilinearInfo.fWeights[iSampleIndex];
+
+            if (isCurrent)
+                fColor += LoadCurrentBackbuffer(iSamplePos).rgb * fWeight;
+            else
+                fColor += LoadPreviousBackbuffer(iSamplePos).rgb * fWeight;
+            fWeightSum += fWeight;
+        }
+    }
+
+    //normalize colors
+    fColor = (fWeightSum != 0.0f) ? fColor / fWeightSum : FfxFloat32x3(0.0f, 0.0f, 0.0f);
+--- new
+    // (the variant v-interpolation-filtered-lookups) one sample filtered by the card where any of the four texels
+    // lies in the interpolation rectangle; no sample where none does
+    const FfxFloat32x2 fPx = fReprojectedUv * FfxFloat32x2(texSize);
+    const FfxFloat32x2 fLo = FfxFloat32x2(InterpolationRectBase()) - 0.5f;
+    const FfxFloat32x2 fHi = FfxFloat32x2(InterpolationRectBase() + InterpolationRectSize()) + 0.5f;
+
+    FfxFloat32x3 fColor = FfxFloat32x3(0.0, 0.0, 0.0);
+    FfxFloat32 fWeightSum = 0.0f;
+    if (fPx.x >= fLo.x && fPx.y >= fLo.y && fPx.x < fHi.x && fPx.y < fHi.y)
+    {
+        if (isCurrent)
+            fColor = SampleCurrentBackbuffer(fReprojectedUv);
+        else
+            fColor = SamplePreviousBackbuffer(fReprojectedUv);
+        fWeightSum = 1.0f;
+    }
+--- end

@@ -1,0 +1,24 @@
+# THE RECORD OF THE PRODUCT OF THE OWN BUILD: dlssiv-fg.dll WITH THE CUTS THAT ARE IN (build-ffx-own.ps1 -Target dlssiv-fg,
+# which builds it beside the reference and the exact library). SINCE 2026-10-12 ITS PICTURE IS ITS OWN: its cuts are
+# the exact ones (ffx-own\cuts\CUTS.txt: "in") and, on top of them, the picture cuts the owner accepted in the game
+# ("accepted"). The keys of the records beside it, and four more: how many cuts are in and one digest of them
+# (python tools\ffx-own\cuts.py digest), how many shader headers they change and one digest of those (ffx-own\shaders-cut
+# with ffx-own\shaders-picture laid over it, computed as headers-sha256 is). RECORD-dlssiv-fg.txt is the record of the
+# library with no cut, the reference; RECORD-dlssiv-fg-exact.txt the exact library's, which the judge holds to that
+# reference; PICTURES-dlssiv-fg.txt pins this library's generated pictures. NEVER EDITED BY HAND: python
+# tools\prove-ffx-own.py --new-record-cut writes it and prints what it replaced.
+library dlssiv-fg.dll
+size 822272
+sha256 96764ff6b33ff7f88fbb0c41693b431cb34bf3e106c2449327aecf411f1ff03f
+cl 19.44.35228
+link 14.44.35228.0
+windows-sdk 10.0.26100.0
+dxc 1.8.2502.11
+headers 72
+headers-sha256 d029c64fa53eb30f5f2c33c5c3b20d3b0e5ee22bcde8155031963c89bf2e70bc
+manifest-rows 98
+manifest-sha256 7d00456d94e33433cddf6506ee4b49b7881d1341476599243ce43c34ba4b43f6
+cuts 27
+cuts-sha256 f5453779c41113584fdeb3ff4d9ffb4e32c1526a77896902210fb1cd0ba86688
+cut-headers 30
+cut-headers-sha256 65b484e65392156039b60dacec5a34c5dc6b6535d65903c897bc61bb9fa9eb90

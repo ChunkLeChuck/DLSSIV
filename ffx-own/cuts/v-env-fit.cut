@@ -1,0 +1,81 @@
+# A VARIANT, NEVER THE PRODUCT: THE SAMPLE THAT FITS THE PLACE'S LIGHT, WHERE ONE OF THE TWO DOES NOT (2026-10-27; round 9's tyre desk,
+# docs\reports\fg-5\desk-2026-10-27-tyres: FINDINGS.md and the replays of the owner's capture of that afternoon).
+# ON TOP OF THE PRODUCT. IT CHANGES THE PICTURE ONLY WHERE BOTH SAMPLES ARE USED AND THEIR BRIGHTNESS LIES MORE THAN FIT_0 APART.
+#
+# THE OWNER'S SYMPTOM: panning right at speed, "a faint ROUND copy of the tyre itself, a bit behind it", "mostly visible on the
+# road"; most visible "where shadowy areas and sunny patches on the ground change each other in quick succession".
+# WHAT THE PRODUCT DOES THERE. Behind the tyre's foot the road comes out from under the tyre, and AMD's occlusion test does not
+# see the tyre hide it (the depth gap there is under its separation; at the very foot the tyre also bounces a few pixels
+# between the real frames), so the generated pixel blends two samples: the frame before's, which is the TYRE, and the current
+# frame's, which is the road. v-env then weighs the two by how much relighting each needed (its trust): the road there is
+# fetched from where the sun lies on it and put where the car's shade lies (a large gain down), the tyre is fetched from the
+# tyre's foot, whose envelopes hold both the shade and the sun that streams under it (no gain): the trust takes the tyre, up to
+# nine tenths of it. As sunny and shaded patches pass behind the tyre one after the other, the copy comes and goes from one
+# generated frame to the next: a dark round copy of the tyre's lower part, a road step's half behind it.
+# THE CUT, at the blend of the two samples along the game's vector, where both are used: each sample's brightness (as v-env
+# relit it) against what the place itself has been seen to hold, its two envelopes. How far each lies OUTSIDE that band; where
+# one lies outside by FIT_0 more than the other, the blend moves to the other, whole from FIT_1 more. The road relit into
+# the car's shade lies within the place's band; the tyre lies far below it. Where the two samples are the same thing (the
+# plain moving ground, the car on itself) they lie inside or outside together and nothing moves. Only where the two samples'
+# brightness differs by more than FIT_0 is the place's envelope read at all (a test of the two lumas, no log): elsewhere the
+# product's bits. Not in the frames after a reset, nor where the pixel hardly moves (v-env's own fGrown, as v-edge reads it).
+# Symmetric: a sample of the current frame that lands on the tyre (the road about to go under it) is treated the same way.
+# OUT, THE SAME DAY (CUTS.txt): on the capture's five runs it took the copy's mass a frame from 3,442 to 3,568 (run 4) and from
+# 2,958 to 2,636 (run 5) (tyrecopy.py, the product's relit samples): where the tyre's foot sweeps the place as it bounces, the
+# place's own band holds the tyre's darkness and the copy fits it; and it speckles the spinning tyre's tread (two samples of
+# different tread, more than FIT_0 apart, one taken whole). The variant "tyre" (v-hide-by-vector, v-hide-reach, v-env-darker,
+# v-lone-place) is the fix.
+what A VARIANT (the picture changes): where both samples are used and one lies far outside the light the place has been seen to hold while the other lies within it, the blend takes the one that fits
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- new
+// (the variant v-env-fit) THE SAMPLE THAT FITS THE PLACE: where both samples are used and their brightness lies more than FIT_0
+// apart, each one's distance outside the place's two envelopes; the blend moves to the one that fits by how much less it lies
+// outside (nothing under FIT_0, whole from FIT_1). t in, t out.
+FFX_STATIC const FfxFloat32 FIT_0 = 0.4f;     // log brightness
+FFX_STATIC const FfxFloat32 FIT_1 = 0.8f;
+
+FfxFloat32 envFit(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, FfxFloat32x3 fPrevRaw, FfxFloat32x3 fCurrRaw, FfxFloat32 t)
+{
+    const FfxFloat32x2 fLuma = FfxFloat32x2(RGBToLuma(fPrevRaw), RGBToLuma(fCurrRaw));
+    const FfxFloat32   fPower = BackBufferTransferFunction() == 0 ? ENV_SRGB : 1.0f;
+    // the cheap test first: the two samples' brightness more than FIT_0 apart (in the envelopes' units)
+    if (ffxMax(fLuma.x, fLuma.y) <= exp(FIT_0 / fPower) * ffxMax(ffxMin(fLuma.x, fLuma.y), 1.0e-6f))
+    {
+        return t;
+    }
+    const FfxFloat32x2 fSize = FfxFloat32x2(DisplaySize());
+    const FfxFloat32x2 fHalf = fHalfUv * (PositionWhole() * 0.5f) * fSize;
+    FfxFloat32 fGrown = ffxSaturate((FfxFloat32(FrameIndexSinceLastReset()) - ENV_FRAME_0) / (ENV_FRAME_1 - ENV_FRAME_0));
+    fGrown *= smoothstep(ENV_MOVED_0 * ENV_MOVED_0, ENV_MOVED_1 * ENV_MOVED_1, dot(fHalf, fHalf));
+    if (fGrown <= 0.0f)
+    {
+        return t;
+    }
+    const FfxFloat32x2 fScale = fSize / FfxFloat32x2(((DisplaySize() + (ENV_TEXEL - 1)) / ENV_TEXEL) * ENV_TEXEL);
+    const FfxFloat32x2 fBand  = SampleEnvCurrent(fUv * fScale);          // x the upper envelope, y the lower one
+    const FfxFloat32x2 fLog   = log(ffxMax(fLuma, FfxFloat32x2(1.0e-6f, 1.0e-6f))) * fPower;
+    const FfxFloat32x2 fOut   = ffxMax(ffxMax(fBand.yy - fLog, fLog - fBand.xx), FfxFloat32x2(0.0f, 0.0f));
+    const FfxFloat32   fToCurr = smoothstep(FIT_0, FIT_1, fOut.x - fOut.y) * fGrown;
+    const FfxFloat32   fToPrev = smoothstep(FIT_0, FIT_1, fOut.y - fOut.x) * fGrown;
+    return ffxLerp(ffxLerp(t, 1.0f, fToCurr), 0.0f, fToPrev);
+}
+
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+            t = ffxLerp(t, fEnvT, fEnvShare);
+        }
+--- new
+            t = ffxLerp(t, fEnvT, fEnvShare);
+        }
+        // (the variant v-env-fit) where both samples are used, the one that fits the place's light, where the other does not
+        if (fDisocclusionFactor.x > 0.0f && fDisocclusionFactor.y > 0.0f)
+        {
+            t = envFit(fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale, fPrevColorGame.fRaw, fCurrColorGame.fRaw, t);
+        }
+--- end

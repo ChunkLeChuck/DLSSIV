@@ -1,0 +1,34 @@
+# THE INTERPOLATION PASS SAMPLES THE TWO PICTURES ONCE WHERE OPTICAL FLOW'S VECTOR IS THE GAME'S (2026-10-10, the own
+# build's stage 3).
+#
+# WHAT AMD'S CODE DOES. For every pixel of the display the interpolation pass reads the previous and the current
+# picture twice: along the game's vector, and along optical flow's (each read is a bilinear sample by hand: four loads
+# of the 16-bit float picture). The eight loads along optical flow's vector are 74 us of the pass's 200 (a probe of
+# stage 3 that took them from the game's instead; it is not the picture).
+#
+# THE CUT. Where optical flow's vector IS the game's vector, component for component, the two reads along it are the
+# two reads along the game's: the same function of the same arguments (the position, the vector times the same scale,
+# the size). They are then taken from there and not made again. Where the vectors differ in either component (or one
+# is not a number) both reads are made as before.
+#   WHERE THAT IS. Optical flow writes no vector where it found a pixel or less of motion, and its field is zero
+#   there; the game's vector is zero wherever nothing moves on the screen. So this is every pixel of a picture that
+#   stands still, and next to none of a picture that moves as a whole.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what the interpolation pass (I8) takes its two reads along optical flow's vector from the two along the game's where the two vectors are the same (a picture that stands still)
+passes ffx_frameinterpolation_pass
+wave64 it edits one shader file that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    InterpolationSourceColor fPrevColorOF = SampleTextureBilinear(false, fUvInScreenSpace, +ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());
+    InterpolationSourceColor fCurrColorOF = SampleTextureBilinear(true, fUvInScreenSpace, -ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());
+--- new
+    // (the mod's cut fi-interpolation-same-vector-once: the same function of the same arguments is not computed twice)
+    InterpolationSourceColor fPrevColorOF = fPrevColorGame;
+    InterpolationSourceColor fCurrColorOF = fCurrColorGame;
+    if (ofMv.fMotionVector.x != gameMv.fMotionVector.x || ofMv.fMotionVector.y != gameMv.fMotionVector.y)
+    {
+        fPrevColorOF = SampleTextureBilinear(false, fUvInScreenSpace, +ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());
+        fCurrColorOF = SampleTextureBilinear(true, fUvInScreenSpace, -ofMv.fMotionVector * fUvLetterBoxScale, DisplaySize());
+    }
+--- end

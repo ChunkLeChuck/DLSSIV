@@ -1,0 +1,27 @@
+# A VARIANT TO COMPARE WITH, NEVER THE PRODUCT: v-env WITH ITS ENVELOPES AT A QUARTER OF THE DISPLAY'S SIZE (2026-10-11). On top of
+# v-env, one number in three places: a texel of the brightness's envelopes is 4 by 4 pixels of the display where
+# v-env's is 2 by 2 (and a texel of the tint's 8 by 8 where v-env's is 4 by 4). A quarter of the texels to write and
+# to keep. The numbers of the bands are the same; THE PICTURE IS NOT: the car's hard shadow is drawn by the envelopes
+# themselves, and at this size its edge shows the texels as steps of four pixels
+# (docs\reports\fg-3\desk-2026-10-11-ghost\env). It is here so that the choice of the size can be seen and priced.
+what A VARIANT (the picture changes): v-env with a texel of its envelopes for 4 by 4 pixels of the display in place of 2 by 2
+passes ffx_frameinterpolation_pass, ffx_frameinterpolation_disocclusion_mask_pass
+wave64 the same edits in both variants: one constant
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+FFX_STATIC const FfxInt32   ENV_TEXEL      = 2;
+--- new
+FFX_STATIC const FfxInt32   ENV_TEXEL      = 4;         // (the variant v-env-quarter)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FFX_STATIC const FfxInt32   ENV_TEXEL         = 2;          // as the disocclusion mask's pass writes the envelopes
+--- new
+FFX_STATIC const FfxInt32   ENV_TEXEL         = 4;          // (the variant v-env-quarter) as the disocclusion mask's pass writes the envelopes
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+        const uint32_t envTexel = 2;    // ENV_TEXEL of the two shader files
+--- new
+        const uint32_t envTexel = 4;    // (the variant v-env-quarter) ENV_TEXEL of the two shader files
+--- end

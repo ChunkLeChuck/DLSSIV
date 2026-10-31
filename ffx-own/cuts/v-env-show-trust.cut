@@ -1,0 +1,54 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: WHAT v-env's TRUST SEES AT A PIXEL, AS NUMBERS IN THE PICTURE (2026-10-27; round 9's tyre desk,
+# docs\reports\fg-5\desk-2026-10-27-tyres). On top of the product. Every pixel of the generated image comes out as three
+# numbers a replay can read back (column.py there):
+#   red     the frame before's sample's brightness need (envOne's fNeeded, log, BEFORE the gate: what the trust weighs)
+#   green   the current frame's sample's, the same
+#   blue    the current sample's share the pass used, 10 more where the pixel was relit (bEnv), 20 more where both samples
+#           are used (both disocclusion factors 1); 0 to 1 plus those codes
+# and nothing is inpainted, so that the numbers stand.
+what AN INSTRUMENT (the picture changes): every pixel is painted with the two samples' brightness needs before v-env's gate and the current sample's share with codes
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FfxBoolean envRelight(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, inout FfxFloat32x3 fPrevRaw, inout FfxFloat32x3 fCurrRaw, out FfxFloat32 fEnvT, out FfxFloat32 fEnvShare)
+--- new
+// (the instrument v-env-show-trust)
+static FfxFloat32x2 g_envRawNeed = FfxFloat32x2(0.0f, 0.0f);
+
+FfxBoolean envRelight(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, inout FfxFloat32x3 fPrevRaw, inout FfxFloat32x3 fCurrRaw, out FfxFloat32 fEnvT, out FfxFloat32 fEnvShare)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    if (ffxMax(fBelievedPrev.x, fBelievedCurr.x) <= ENV_LEAST)
+--- new
+    g_envRawNeed = FfxFloat32x2(fNeedPrev.x, fNeedCurr.x);    // (the instrument v-env-show-trust)
+    if (ffxMax(fBelievedPrev.x, fBelievedCurr.x) <= ENV_LEAST)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+--- new
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+        // (the instrument v-env-show-trust)
+        fInterpolatedColor = FfxFloat32x3(g_envRawNeed, g_envShowT);
+        fInPaintingWeight  = 0.0f;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+        fDisoccludedFactor = ffxSaturate(1 - ffxMin(fDisocclusionFactor.x, fDisocclusionFactor.y));
+--- new
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+        fDisoccludedFactor = ffxSaturate(1 - ffxMin(fDisocclusionFactor.x, fDisocclusionFactor.y));
+        // (the instrument v-env-show-trust)
+        g_envShowT = ffxSaturate(t) + 10.0f * FfxFloat32(bEnv) + 20.0f * FfxFloat32(fDisocclusionFactor.x > 0.0f && fDisocclusionFactor.y > 0.0f);
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- new
+static FfxFloat32 g_envShowT = 0.0f;    // (the instrument v-env-show-trust)
+
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- end

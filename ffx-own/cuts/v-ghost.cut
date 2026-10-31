@@ -1,0 +1,655 @@
+# A VARIANT, NEVER THE PRODUCT: THE GHOST OUTLINE BEHIND A THING THAT STANDS STILL ON THE SCREEN OVER A FAST BACKGROUND
+# (2026-10-11; docs\reports\fg-3\sitting-2026-10-11b\BRIEF-ghost.md, READING.md 5b to 5e, RESEARCH-disocclusion.md).
+# IT CHANGES THE PICTURE. Built only into a variant library (build-ffx-own.ps1 -Variant; tools\ffx-own\build_variants.py).
+#
+# WHAT AMD'S CODE DOES THERE. Behind the player's car the ground passes fast. The strip the car has just uncovered is in
+# ONE real frame; the interpolation pass switches hard between "one frame" and "both" at the render size, and a fetched
+# piece of ground arrives with the shade of the place it was fetched from: the strip stands out, a seam in the shape
+# of the car's back lies half a ground step behind it, and the frame before's part beyond the seam carries the car's
+# own shade out with it.
+#
+# THE VARIANT, in three passes of AMD's and with no pass added:
+#   THE DISOCCLUSION MASK'S PASS (render size) looks along a pixel's motion, in the CURRENT frame's depth, for the first
+#     jump towards the camera: an occluder's edge. It looks only for a pixel that moves by three render pixels a half
+#     step or more AND that AMD's own mask calls disoccluded, or whose neighbourhood is nearer and moves otherwise (the
+#     cheap look: two filtered samples of the game field's own pyramid). The occluder must move otherwise itself (by
+#     its own vector, from the current frame's). The distance of each sample's fetch place from that edge, in the
+#     sample's own frame, becomes its weight: about nothing within the keep-off, full after one relative half step.
+#     The mask grows from two channels to four: the two weights (still exactly 0 or 1 wherever nothing was found),
+#     and the occluder's own half vector, which also says "something was found here".
+#   THE OPTICAL FLOW FIELD'S PASS (an eighth of the display, 8 by 8 pixels a thread) also writes THE BROAD COLOUR of
+#     the current real frame: four filtered taps a block, one in each quarter of it, of the block's FAR layer only (by the
+#     frame's depth), and that layer's depth beside it. ONE small image a dispatch; the frame before's is the one the
+#     dispatch before wrote (the two images change places at every dispatch). The first interpolated frame after a
+#     reset has no such image of the frame before it and takes no broad colour (its weights it takes).
+#   THE INTERPOLATION PASS, only where the mask says something was found: (1) each fetched sample takes the broad colour
+#     of the place it is put, from its own frame: sample * low(target) / low(fetch), the target displaced by the
+#     occluder's half vector, a block left out whose far layer is nearer than the pixel's own surface, the gain held
+#     within 1/3 and 3, and only as far as the two real frames agree about the place's broad brightness; (2) the two
+#     samples are mixed by their weights, so the switch from one frame to both is a ramp; (3) where the gain would
+#     pass its bound the sample fades to the same frame's own pixel at the place (the right shade, the wrong texture
+#     phase). Optical flow is kept out as far as the weights are low, as AMD keeps it out of a disoccluded pixel.
+# EVERYWHERE ELSE THE PICTURE IS THE PRODUCT'S: the mask's first two channels are AMD's 0 and 1 there, its last two are
+# 0, and the interpolation pass takes AMD's own path on that test alone.
+#
+# NO NEW KIND OF CALL: loads, filtered samples of one level (SampleLevel through AMD's own linear, clamped sampler), plain
+# arithmetic; no gather, no wave operation, no atomic.
+what A VARIANT (the picture changes): near a nearer thing that moves otherwise, each sample of the interpolation takes the broad colour of the place it is put and is weighed by its distance from that thing in its own frame
+passes ffx_frameinterpolation_pass, ffx_frameinterpolation_disocclusion_mask_pass, ffx_frameinterpolation_optical_flow_vector_field_pass
+wave64 the same edits in both variants: no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_callbacks_hlsl.h
+--- old
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK
+--- new
+// (the variant v-ghost) the two images of the real frames' broad colour, and the mask with its four channels
+#ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_GHOST_LOW_PREVIOUS
+    Texture2D<FfxFloat32x4> r_ghost_low_previous FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_GHOST_LOW_PREVIOUS);
+
+    FfxFloat32x4 LoadGhostLowPrevious(FFX_PARAMETER_IN FfxInt32x2 iPxPos)
+    {
+        return r_ghost_low_previous[iPxPos];
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_GHOST_LOW_CURRENT
+    Texture2D<FfxFloat32x4> r_ghost_low_current FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_GHOST_LOW_CURRENT);
+
+    FfxFloat32x4 LoadGhostLowCurrent(FFX_PARAMETER_IN FfxInt32x2 iPxPos)
+    {
+        return r_ghost_low_current[iPxPos];
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_GHOST_LOW_PREVIOUS
+    RWTexture2D<FfxFloat32x4> rw_ghost_low_previous FFX_DECLARE_UAV(FFX_FRAMEINTERPOLATION_BIND_UAV_GHOST_LOW_PREVIOUS);
+
+    void StoreGhostLowPrevious(FFX_PARAMETER_IN FfxInt32x2 iPxPos, FFX_PARAMETER_IN FfxFloat32x4 val)
+    {
+        rw_ghost_low_previous[iPxPos] = val;
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_GHOST_LOW_CURRENT
+    RWTexture2D<FfxFloat32x4> rw_ghost_low_current FFX_DECLARE_UAV(FFX_FRAMEINTERPOLATION_BIND_UAV_GHOST_LOW_CURRENT);
+
+    void StoreGhostLowCurrent(FFX_PARAMETER_IN FfxInt32x2 iPxPos, FFX_PARAMETER_IN FfxFloat32x4 val)
+    {
+        rw_ghost_low_current[iPxPos] = val;
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK_GHOST
+    RWTexture2D<FfxFloat32x4> rw_disocclusion_mask FFX_DECLARE_UAV(FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK_GHOST);
+
+    void StoreDisocclusionMaskGhost(FFX_PARAMETER_IN FfxInt32x2 iPxPos, FFX_PARAMETER_IN FfxFloat32x4 val)
+    {
+        rw_disocclusion_mask[iPxPos] = val;
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_disocclusion_mask_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK                       0
+--- new
+// (the variant v-ghost) the current frame's vectors, for the occluder's own; the mask with four channels
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_DILATED_MOTION_VECTORS                  7
+
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK_GHOST                 0
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_optical_flow_vector_field_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_OPTICAL_FLOW_MOTION_VECTOR_FIELD_Y      1
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_OPTICAL_FLOW_MOTION_VECTOR_FIELD_Y      1
+// (the variant v-ghost) the image of the current real frame's broad colour
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_GHOST_LOW_CURRENT                       2
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_COUNTERS                                8
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_COUNTERS                                8
+// (the variant v-ghost) the two images of the real frames' broad colour, and the generated frame's own depth
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_GHOST_LOW_PREVIOUS                      9
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_GHOST_LOW_CURRENT                       10
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_RECONSTRUCTED_DEPTH_INTERPOLATED_FRAME  11
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_COUNTERS,                                   L"r_counters"},
+--- new
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_COUNTERS,                                   L"r_counters"},
+    // (the variant v-ghost) the two images of the real frames' broad colour, under two identifiers AMD keeps in reserve
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2,                                 L"r_ghost_low_previous"},
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3,                                 L"r_ghost_low_current"},
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_INPAINTING_MASK,                            L"rw_inpainting_mask"},
+--- new
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_INPAINTING_MASK,                            L"rw_inpainting_mask"},
+    // (the variant v-ghost)
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2,                                 L"rw_ghost_low_previous"},
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3,                                 L"rw_ghost_low_current"},
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    internalResourceDescriptions->disocclusionMask = { FfxResourceHeapPlacementInfo::InitDefault(), { FFX_API_RESOURCE_TYPE_TEXTURE2D, FFX_API_SURFACE_FORMAT_R8G8_UNORM, maxRenderSize->width, maxRenderSize->height, 1, 1, FFX_API_RESOURCE_FLAGS_ALIASABLE, FFX_API_RESOURCE_USAGE_UAV }, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS, L"FI_DisocclusionMask", FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_DISOCCLUSION_MASK, {FFX_RESOURCE_INIT_DATA_TYPE_UNINITIALIZED} };
+--- new
+    // (the variant v-ghost) four channels: AMD's two, and the occluder's half vector
+    internalResourceDescriptions->disocclusionMask = { FfxResourceHeapPlacementInfo::InitDefault(), { FFX_API_RESOURCE_TYPE_TEXTURE2D, FFX_API_SURFACE_FORMAT_R8G8B8A8_UNORM, maxRenderSize->width, maxRenderSize->height, 1, 1, FFX_API_RESOURCE_FLAGS_ALIASABLE, FFX_API_RESOURCE_USAGE_UAV }, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS, L"FI_DisocclusionMask", FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_DISOCCLUSION_MASK, {FFX_RESOURCE_INIT_DATA_TYPE_UNINITIALIZED} };
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    // copy resources to uavResrouces list
+--- new
+    // (the variant v-ghost) the two images of the real frames' broad colour: an eighth of the display (a block of the
+    // optical flow's grid a texel). The optical flow field's pass writes the "current" one whole in every dispatch that
+    // interpolates; ffxFrameInterpolationDispatch makes the two change places first
+    {
+        const uint32_t ghostLowIds[2] = {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2, FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3};
+        const wchar_t* ghostLowNames[2] = {L"FI_GhostLowPrevious", L"FI_GhostLowCurrent"};
+        for (int i = 0; i < 2; ++i)
+        {
+            FfxCreateResourceDescription ghostLow = { FfxResourceHeapPlacementInfo::InitDefault(), { FFX_API_RESOURCE_TYPE_TEXTURE2D, FFX_API_SURFACE_FORMAT_R16G16B16A16_FLOAT, (contextDescription->displaySize.width + 7) / 8, (contextDescription->displaySize.height + 7) / 8, 1, 1, FFX_API_RESOURCE_FLAGS_NONE, FFX_API_RESOURCE_USAGE_UAV }, FFX_API_RESOURCE_STATE_UNORDERED_ACCESS, ghostLowNames[i], ghostLowIds[i], {FFX_RESOURCE_INIT_DATA_TYPE_UNINITIALIZED} };
+            FFX_VALIDATE(context->contextDescription.backendInterface.fpCreateResource(&context->contextDescription.backendInterface, &ghostLow, context->effectContextId, &context->srvResources[ghostLowIds[i]]));
+        }
+    }
+
+    // copy resources to uavResrouces list
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+            {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_DISOCCLUSION_MASK,                      FFX_API_RESOURCE_USAGE_UAV},
+--- new
+            {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_DISOCCLUSION_MASK,                      FFX_API_RESOURCE_USAGE_UAV},
+            // (the variant v-ghost)
+            {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2,                             FFX_API_RESOURCE_USAGE_UAV},
+            {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3,                             FFX_API_RESOURCE_USAGE_UAV},
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    uint32_t displayDispatchSizeX = uint32_t(params->displaySize.width + 7) / 8;
+--- new
+    // (the variant v-ghost) THE TWO IMAGES OF THE BROAD COLOUR CHANGE PLACES: what the dispatch before wrote as the current
+    // frame's is the frame before's now, and the older one is written anew by this dispatch's optical flow field pass.
+    // A dispatch told to reset writes none: the interpolation pass uses the frame before's image from the second
+    // interpolated frame after a reset on, and by then it is that frame's.
+    {
+        const FfxResourceInternal ghostLowSwap = contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2];
+        contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2] = contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3];
+        contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3] = ghostLowSwap;
+        contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2] = contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_2];
+        contextPrivate->uavResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3] = contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3];
+    }
+
+    uint32_t displayDispatchSizeX = uint32_t(params->displaySize.width + 7) / 8;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_optical_flow_vector_field.h
+--- old
+void computeOpticalFlowVectorField(FfxInt32x2 iPxPos)
+{
+--- new
+// (the variant v-ghost) THE BROAD COLOUR OF THE CURRENT REAL FRAME OVER ONE BLOCK OF THE OPTICAL FLOW'S GRID: four filtered taps, one
+// in each quarter of the block (each the mean of two by two pixels where the block is 8 wide), of the block's FAR layer
+// only, by the frame's own depth:
+// a tap whose surface is nearer than three quarters of the farthest tap's distance is left out, so a block on an
+// occluder's edge holds the ground and not the occluder. xyz: the colour; w: the far layer's distance (capped).
+FFX_STATIC const FfxFloat32 GHOST_FAR   = 60000.0f;
+FFX_STATIC const FfxFloat32 GHOST_LAYER = 0.25f;
+
+FfxFloat32x4 ghostLowOfBlock(FfxInt32x2 iBlock)
+{
+    const FfxFloat32   fBlock = FfxFloat32(GetOpticalFlowBlockSize());
+    const FfxFloat32x2 fBase  = FfxFloat32x2(iBlock) * fBlock;
+
+    FfxFloat32x3 fTapColor[4];
+    FfxFloat32   fTapView[4];
+    FfxFloat32   fFar = 0.0f;
+    for (FfxInt32 iTap = 0; iTap < 4; iTap++)
+    {
+        const FfxFloat32x2 fAt = FfxFloat32x2((iTap & 1) != 0 ? 0.75f : 0.25f, (iTap & 2) != 0 ? 0.75f : 0.25f);
+        const FfxFloat32x2 fUv = (fBase + fBlock * fAt) / FfxFloat32x2(DisplaySize());
+        const FfxInt32x2   iLr = FfxInt32x2(fUv * FfxFloat32x2(RenderSize()));
+
+        fTapColor[iTap] = ffxMax(SampleCurrentBackbuffer(fUv), FfxFloat32x3(0.0f, 0.0f, 0.0f));
+        fTapView[iTap]  = ffxMin(abs(ConvertFromDeviceDepthToViewSpace(LoadDilatedDepth(iLr))), GHOST_FAR);
+        fFar            = ffxMax(fFar, fTapView[iTap]);
+    }
+
+    FfxFloat32x3 fSum   = FfxFloat32x3(0.0f, 0.0f, 0.0f);
+    FfxFloat32   fCount = 0.0f;
+    for (FfxInt32 iTap2 = 0; iTap2 < 4; iTap2++)
+    {
+        if (fTapView[iTap2] >= fFar * (1.0f - GHOST_LAYER))
+        {
+            fSum += fTapColor[iTap2];
+            fCount += 1.0f;
+        }
+    }
+
+    return FfxFloat32x4(fSum / ffxMax(fCount, 1.0f), fFar);
+}
+
+void computeOpticalFlowVectorField(FfxInt32x2 iPxPos)
+{
+    // (the variant v-ghost)
+    StoreGhostLowCurrent(iPxPos, ghostLowOfBlock(iPxPos));
+
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+void computeDisocclusionMask(FfxInt32x2 iPxPos)
+--- new
+// (the variant v-ghost) WHERE IS THE EDGE OF AN OCCLUDER ALONG THIS PIXEL'S MOTION. A march from the pixel in the CURRENT
+// frame's depth, four render pixels a step: the first place whose surface is nearer than the place before it by more
+// than GHOST_JUMP of its distance (the ground's own slope along the march is far under that) is the occluder; two taps
+// more say its edge to a render pixel. The distance in render pixels, or -1 where there is none within reach. (An
+// occluder thinner than four render pixels along the march may be stepped over: there AMD's own picture stands.)
+FFX_STATIC const FfxFloat32 GHOST_MIN_STEP  = 3.0f;     // render pixels of half step under which nothing is looked for
+FFX_STATIC const FfxFloat32 GHOST_KEEP_OFF  = 1.5f;     // render pixels next to the occluder where a sample weighs about nothing
+FFX_STATIC const FfxFloat32 GHOST_JUMP      = 0.12f;
+FFX_STATIC const FfxFloat32 GHOST_REACH_MAX = 96.0f;    // render pixels: the longest march
+FFX_STATIC const FfxFloat32 GHOST_OTHERWISE = 0.12f;    // of the pixel's own half step: how far the neighbourhood's mean vector must lie off it
+FFX_STATIC const FfxFloat32 GHOST_NEARER    = 0.003f;   // of the field's depth priority (0 to 1): how much nearer the neighbourhood must be in the mean
+
+FfxFloat32 ghostMarch(FfxFloat32x2 fPos, FfxFloat32x2 fDir, FfxFloat32 fReach, FfxFloat32 fStartView, out FfxInt32x2 iHit)
+{
+    FfxFloat32 fFound = -1.0f;
+    FfxFloat32 fBefore = fStartView;
+    iHit = FfxInt32x2(0, 0);
+    for (FfxFloat32 fT = 4.0f; fT <= fReach && fFound < 0.0f; fT += 4.0f)
+    {
+        const FfxInt32x2 iTap = FfxInt32x2(floor(fPos + fDir * fT));
+        if (!IsOnScreen(iTap, RenderSize()))
+        {
+            break;
+        }
+        const FfxFloat32 fView = abs(ConvertFromDeviceDepthToViewSpace(LoadDilatedDepth(iTap)));
+        if (fView < fBefore * (1.0f - GHOST_JUMP))
+        {
+            // the edge lies in the four pixels before this tap: two more taps halve them twice
+            FfxFloat32 fProbe = fT - 2.0f;
+            iHit   = iTap;
+            fFound = fT;
+            for (FfxInt32 iHalf = 0; iHalf < 2; iHalf++)
+            {
+                const FfxInt32x2 iMid = FfxInt32x2(floor(fPos + fDir * fProbe));
+                const FfxFloat32 fMid = abs(ConvertFromDeviceDepthToViewSpace(LoadDilatedDepth(iMid)));
+                if (fMid < fBefore * (1.0f - GHOST_JUMP))
+                {
+                    iHit   = iMid;
+                    fFound = fProbe;
+                    fProbe -= 1.0f;
+                }
+                else
+                {
+                    fBefore = fMid;
+                    fProbe += 1.0f;
+                }
+            }
+        }
+        else
+        {
+            fBefore = fView;
+        }
+    }
+    return fFound;
+}
+
+// (the variant v-ghost) THE CHEAP LOOK BEFORE A MARCH: two filtered samples of the game field's own pyramid, a step and a half
+// before and behind along the motion, at the level whose texel is as wide as the half step. THE MEAN OF THE TWO is held
+// against the pixel's own vector and nearness: a straight slope of the field cancels in it, so the ground's own
+// perspective asks for no march; a neighbourhood that is nearer AND moves otherwise does. Where either place lies
+// outside the picture nothing is looked for (there the surface leaves the screen, and AMD's own rule stands).
+// True: march, towards the side whose neighbourhood is the nearer one (both where neither stands out).
+FfxBoolean ghostLook(FfxFloat32x2 fPos, FfxFloat32x2 fMvPx, FfxFloat32 fStep, FfxFloat32x2 fHalfVector, FfxFloat32 fMyPriority, out FfxBoolean bWayBefore, out FfxBoolean bWayBehind)
+{
+    bWayBefore = false;
+    bWayBehind = false;
+
+    const FfxFloat32x2 fBefore = fPos + fMvPx * 1.5f;
+    const FfxFloat32x2 fBehind = fPos - fMvPx * 1.5f;
+    const FfxFloat32x2 fSize   = FfxFloat32x2(RenderSize());
+    if (fBefore.x < 0.0f || fBefore.y < 0.0f || fBefore.x >= fSize.x || fBefore.y >= fSize.y || fBehind.x < 0.0f || fBehind.y < 0.0f || fBehind.x >= fSize.x || fBehind.y >= fSize.y)
+    {
+        return false;
+    }
+
+    const FfxFloat32   fLevel     = clamp(ceil(log2(fStep)) - 1.0f, 0.0f, 6.0f);
+    const FfxFloat32   fTexel     = exp2(fLevel + 1.0f);
+    const FfxFloat32x2 fHeld      = floor(fSize / fTexel);                                                                  // the texels of that level that hold this dispatch's field
+    const FfxFloat32x2 fLevelSize = ffxMax(floor(FfxFloat32x2(DisplaySize() / 2) / exp2(fLevel)), FfxFloat32x2(1.0f, 1.0f));   // the pyramid's own size at that level
+    if (fHeld.x < 2.0f || fHeld.y < 2.0f)
+    {
+        return false;
+    }
+
+    const FfxFloat32x2 fUvBefore   = clamp(fBefore / fTexel, FfxFloat32x2(0.5f, 0.5f), fHeld - 0.5f) / fLevelSize;
+    const FfxFloat32x2 fUvBehind   = clamp(fBehind / fTexel, FfxFloat32x2(0.5f, 0.5f), fHeld - 0.5f) / fLevelSize;
+    const FfxFloat32x4 fMeanBefore = r_inpainting_pyramid.SampleLevel(s_LinearClamp, fUvBefore, fLevel);
+    const FfxFloat32x4 fMeanBehind = r_inpainting_pyramid.SampleLevel(s_LinearClamp, fUvBehind, fLevel);
+    const FfxFloat32x4 fMean       = 0.5f * (fMeanBefore + fMeanBehind);
+    if (length((fMean.xy - fHalfVector) * fSize) <= GHOST_OTHERWISE * fStep || fMean.z - fMyPriority <= GHOST_NEARER)
+    {
+        return false;
+    }
+
+    bWayBefore = fMeanBefore.z - fMyPriority > GHOST_NEARER;
+    bWayBehind = fMeanBehind.z - fMyPriority > GHOST_NEARER;
+    if (!bWayBefore && !bWayBehind)
+    {
+        bWayBefore = true;
+        bWayBehind = true;
+    }
+    return true;
+}
+
+// (the variant v-ghost) THE TWO SAMPLES' WEIGHTS AND THE OCCLUDER'S OWN HALF VECTOR, for one pixel of the generated frame
+// whose vector is a true one. xy: what AMD's two factors are multiplied by; zw: the occluder's half vector as two
+// codes (128 is none, a code is half a render pixel), or 0 0 where nothing was found: then xy are 1 1.
+FfxFloat32x4 ghostWeights(FfxInt32x2 iPxPos, FfxFloat32x2 fHalfVector, FfxFloat32 fMyView, FfxFloat32 fMyPriority, FfxFloat32x2 fAmdMask)
+{
+    FfxFloat32x4 fOut = FfxFloat32x4(1.0f, 1.0f, 0.0f, 0.0f);
+
+    const FfxFloat32x2 fMvPx = fHalfVector * FfxFloat32x2(RenderSize());
+    const FfxFloat32   fStep = length(fMvPx);
+    if (fStep < GHOST_MIN_STEP)
+    {
+        return fOut;
+    }
+
+    // A PIXEL AMD'S OWN MASK CALLS DISOCCLUDED NEEDS NO LOOK: the occluder is known to be there, on that side (and a thin
+    // part of one, a spoiler's tip, covers too little of the look's neighbourhood to be seen by it). Every other pixel
+    // marches only where the cheap look says so, and towards the side it names.
+    const FfxFloat32x2 fPos = FfxFloat32x2(iPxPos) + 0.5f;
+    FfxBoolean bWayBefore = fAmdMask.x == 0.0f;
+    FfxBoolean bWayBehind = fAmdMask.y == 0.0f;
+    if (!bWayBefore && !bWayBehind && !ghostLook(fPos, fMvPx, fStep, fHalfVector, fMyPriority, bWayBefore, bWayBehind))
+    {
+        return fOut;
+    }
+
+    const FfxFloat32x2 fDir   = fMvPx / fStep;
+    const FfxFloat32   fReach = ffxMin(2.0f * fStep + GHOST_KEEP_OFF + 2.0f, GHOST_REACH_MAX);
+    FfxFloat32   fNearest = 1.0e9f;
+    FfxFloat32x2 fOccPx   = FfxFloat32x2(0.0f, 0.0f);
+    FfxBoolean   bFound   = false;
+    for (FfxInt32 iWay = 0; iWay < 2; iWay++)
+    {
+        // iWay 0: towards where the pixel's surface came from (the frame before's sample lies that way);
+        // iWay 1: towards where it goes (the current frame's sample)
+        FfxInt32x2 iHit = FfxInt32x2(0, 0);
+        FfxFloat32 fT   = -1.0f;
+        if (iWay == 0 ? bWayBefore : bWayBehind)
+        {
+            fT = ghostMarch(fPos, iWay == 0 ? fDir : -fDir, fReach, fMyView, iHit);
+        }
+        if (fT >= 0.0f)
+        {
+            // the occluder's own half vector, and the pixel's half step RELATIVE to it along the pixel's motion
+            const FfxFloat32x2 fHitPx = 0.5f * LoadDilatedMotionVector(iHit) * FfxFloat32x2(RenderSize());
+            const FfxFloat32   fRel   = dot(fMvPx - fHitPx, fDir);
+            if (fRel >= 0.5f * fStep)
+            {
+                // the sample's fetch place lies fRel towards the occluder: its distance from the edge, in its own frame
+                const FfxFloat32 fDistance = fT - fRel;
+                const FfxFloat32 fWeight   = ffxSaturate((fDistance - GHOST_KEEP_OFF) / fRel);
+                if (fWeight < 1.0f)
+                {
+                    if (iWay == 0)
+                    {
+                        fOut.x = ffxMax(fWeight, 1.0f / 255.0f);
+                    }
+                    else
+                    {
+                        fOut.y = ffxMax(fWeight, 1.0f / 255.0f);
+                    }
+                    if (fDistance < fNearest)
+                    {
+                        fNearest = fDistance;
+                        fOccPx   = fHitPx;
+                    }
+                    bFound = true;
+                }
+            }
+        }
+    }
+    if (bFound)
+    {
+        fOut.zw = clamp(round(fOccPx * 2.0f) + 128.0f, 1.0f, 255.0f) / 255.0f;
+    }
+    return fOut;
+}
+
+void computeDisocclusionMask(FfxInt32x2 iPxPos)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    StoreDisocclusionMask(iPxPos, fDisocclusionMask);
+--- new
+    // (the variant v-ghost) AMD's two factors times the two weights, and the occluder's half vector beside them
+    FfxFloat32x4 fGhost = FfxFloat32x4(1.0f, 1.0f, 0.0f, 0.0f);
+    if (gameMv.bPrimary)
+    {
+        fGhost = ghostWeights(iPxPos, gameMv.fMotionVector, abs(fCurrentDepthViewSpace), gameMv.uHighPriorityFactor, fDisocclusionMask);
+    }
+    StoreDisocclusionMaskGhost(iPxPos, FfxFloat32x4(fDisocclusionMask * fGhost.xy, fGhost.zw));
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- new
+// (the variant v-ghost) EVERYTHING BELOW, TO updateInPaintingWeight, RUNS ONLY IN A PIXEL WHOSE MASK SAYS AN OCCLUDER WAS FOUND.
+FFX_STATIC const FfxFloat32 GHOST_FAR    = 60000.0f;
+FFX_STATIC const FfxFloat32 GHOST_LAYER  = 0.25f;
+FFX_STATIC const FfxFloat32 GHOST_EPS    = 2.0e-4f;     // against a ratio of two darks
+FFX_STATIC const FfxFloat32 GHOST_GAIN   = 3.0f;        // the gain is held within 1 / GHOST_GAIN and GHOST_GAIN
+FFX_STATIC const FfxFloat32 GHOST_FADE   = 3.0f;        // the gain is whole while the lower weight is under 2/3, and gone at 1
+FFX_STATIC const FfxFloat32 GHOST_AGREE0 = 0.3f;        // the two real frames' broad brightness at the place: whole gain under this
+FFX_STATIC const FfxFloat32 GHOST_AGREE1 = 0.6f;        // relative difference, none over this one
+
+// the mask's four texels round the pixel, read one by one: the two weights (filtered by hand), whether a texel of a
+// sample is a hard zero (AMD's own rule: then the sample is not used), and the occluder's half vector of the texel
+// that weighs most among those that found one (in UV of the render size)
+void ghostMask(FfxFloat32x2 fLrUv, out FfxFloat32x2 fWeights, out FfxFloat32x2 fValid, out FfxFloat32x2 fOccUv)
+{
+    BilinearSamplingData bilinearInfo = GetBilinearSamplingData(fLrUv, GetMaxRenderSize());
+
+    fWeights = FfxFloat32x2(0.0f, 0.0f);
+    fValid   = FfxFloat32x2(1.0f, 1.0f);
+    fOccUv   = FfxFloat32x2(0.0f, 0.0f);
+    FfxFloat32 fSum  = 0.0f;
+    FfxFloat32 fMost = 0.0f;
+    for (FfxInt32 iSampleIndex = 0; iSampleIndex < 4; iSampleIndex++)
+    {
+        const FfxFloat32 fWeight = bilinearInfo.fWeights[iSampleIndex];
+        if (fWeight > 0.0f)
+        {
+            const FfxInt32x2   iSamplePos = clamp(bilinearInfo.iBasePos + bilinearInfo.iOffsets[iSampleIndex], FfxInt32x2(0, 0), RenderSize() - 1);
+            const FfxFloat32x4 fTexel     = LoadDisocclusionMask(iSamplePos);
+
+            fWeights += fTexel.xy * fWeight;
+            fSum     += fWeight;
+            if (fTexel.x == 0.0f)
+            {
+                fValid.x = 0.0f;
+            }
+            if (fTexel.y == 0.0f)
+            {
+                fValid.y = 0.0f;
+            }
+            if ((fTexel.z != 0.0f || fTexel.w != 0.0f) && fWeight > fMost)
+            {
+                fMost  = fWeight;
+                fOccUv = (round(fTexel.zw * 255.0f) - 128.0f) * 0.5f / FfxFloat32x2(RenderSize());
+            }
+        }
+    }
+    fWeights = fWeights / ffxMax(fSum, FFX_FRAMEINTERPOLATION_EPSILON) * fValid;
+}
+
+// the broad colour of a real frame at a place (display pixels), from the blocks the optical flow field's pass wrote:
+// filtered by hand over four blocks, a block left out whose far layer is nearer than the pixel's own surface
+FfxFloat32x3 ghostLow(FfxBoolean bCurrent, FfxFloat32x2 fPx, FfxFloat32 fMyView, out FfxBoolean bThere)
+{
+    const FfxInt32     iBlock = GetOpticalFlowBlockSize();
+    const FfxInt32x2   iGrid  = ffxMin((DisplaySize() + 7) / 8, (DisplaySize() + iBlock - 1) / iBlock);
+    const FfxFloat32x2 fAt    = fPx / FfxFloat32(iBlock) - 0.5f;
+    const FfxFloat32x2 fBase  = floor(fAt);
+    const FfxFloat32x2 fFrac  = fAt - fBase;
+
+    FfxFloat32x3 fSum    = FfxFloat32x3(0.0f, 0.0f, 0.0f);
+    FfxFloat32   fWeight = 0.0f;
+    for (FfxInt32 iSampleIndex = 0; iSampleIndex < 4; iSampleIndex++)
+    {
+        const FfxInt32x2 iOffset = FfxInt32x2(iSampleIndex & 1, iSampleIndex >> 1);
+        const FfxInt32x2 iPos    = clamp(FfxInt32x2(fBase) + iOffset, FfxInt32x2(0, 0), iGrid - 1);
+        const FfxFloat32 fW      = (iOffset.x != 0 ? fFrac.x : 1.0f - fFrac.x) * (iOffset.y != 0 ? fFrac.y : 1.0f - fFrac.y);
+
+        FfxFloat32x4 fTexel;
+        if (bCurrent)
+        {
+            fTexel = LoadGhostLowCurrent(iPos);
+        }
+        else
+        {
+            fTexel = LoadGhostLowPrevious(iPos);
+        }
+        if (fTexel.w >= fMyView * (1.0f - GHOST_LAYER))
+        {
+            fSum    += fTexel.xyz * fW;
+            fWeight += fW;
+        }
+    }
+    bThere = fWeight > 0.01f;
+    return fSum / ffxMax(fWeight, 1.0e-6f);
+}
+
+// one sample with the broad colour of the place it is put: its gain, held within bounds and taken as far as
+// fStrength says; where the gain would pass its bound, a fade to the same frame's own pixel at the place
+FfxFloat32x3 ghostShade(FfxBoolean bCurrent, FfxFloat32x3 fSample, FfxFloat32x3 fLowPlace, FfxFloat32x3 fLowFetch, FfxFloat32 fStrength, FfxFloat32x2 fUvInScreenSpace, FfxFloat32x2 fOccMotion)
+{
+    const FfxFloat32x3 fGain    = (fLowPlace + GHOST_EPS) / (fLowFetch + GHOST_EPS);
+    const FfxFloat32x3 fBeyond  = ffxMax(fGain, FfxFloat32x3(1.0f, 1.0f, 1.0f) / fGain);
+    const FfxFloat32   fOver    = ffxMax(fBeyond.x, ffxMax(fBeyond.y, fBeyond.z)) / GHOST_GAIN;
+    const FfxFloat32x3 fHeld    = clamp(fGain, 1.0f / GHOST_GAIN, GHOST_GAIN);
+    FfxFloat32x3       fColor   = fSample * ffxLerp(FfxFloat32x3(1.0f, 1.0f, 1.0f), fHeld, fStrength);
+
+    const FfxFloat32 fToPlace = ffxSaturate(fOver - 1.0f) * fStrength;
+    if (fToPlace > 0.0f)
+    {
+        const InterpolationSourceColor fOwn = SampleTextureBilinear(bCurrent, fUvInScreenSpace, fOccMotion, DisplaySize());
+        if (fOwn.fBilinearWeightSum > 0.0f)
+        {
+            fColor = ffxLerp(fColor, fOwn.fRaw, fToPlace);
+        }
+    }
+    return fColor;
+}
+
+// THE PIXEL: AMD's two factors become 0 or 1 by the mask's hard zeros; the two samples take their places' broad colour;
+// fGhostT is the share of the current frame's sample, fGhostDisoccluded how far optical flow is kept out
+void ghostPixel(FfxInt32x2 iPxPos, FfxFloat32x2 fUvInScreenSpace, FfxFloat32x2 fLrUv, FfxFloat32x2 fHalfMotion, FfxFloat32x2 fUvLetterBoxScale,
+                inout FfxFloat32x2 fDisocclusionFactor, inout InterpolationSourceColor fPrevColor, inout InterpolationSourceColor fCurrColor,
+                out FfxFloat32 fGhostT, out FfxFloat32 fGhostDisoccluded)
+{
+    FfxFloat32x2 fWeights;
+    FfxFloat32x2 fValid;
+    FfxFloat32x2 fOccUv;
+    ghostMask(fLrUv, fWeights, fValid, fOccUv);
+
+    fDisocclusionFactor = fValid;
+    fGhostT             = (fWeights.x + fWeights.y) > 0.0f ? fWeights.y / (fWeights.x + fWeights.y) : 0.5f;
+    fGhostDisoccluded   = ffxSaturate(1.0f - ffxMin(fWeights.x, fWeights.y));
+
+    const FfxInt32x2   iLr     = clamp(FfxInt32x2(fLrUv * FfxFloat32x2(GetMaxRenderSize())), FfxInt32x2(0, 0), RenderSize() - 1);
+    const FfxFloat32   fMyView = ffxMin(abs(ConvertFromDeviceDepthToViewSpace(LoadEstimatedInterpolationFrameDepth(iLr))), GHOST_FAR);
+    const FfxFloat32x2 fPx     = FfxFloat32x2(iPxPos) + 0.5f;
+    const FfxFloat32x2 fMvPx   = fHalfMotion * fUvLetterBoxScale * FfxFloat32x2(DisplaySize());
+    const FfxFloat32x2 fOccPx  = fOccUv * fUvLetterBoxScale * FfxFloat32x2(DisplaySize());
+
+    FfxBoolean bPlacePrev;
+    FfxBoolean bFetchPrev;
+    FfxBoolean bPlaceCurr;
+    FfxBoolean bFetchCurr;
+    const FfxFloat32x3 fPlacePrev = ghostLow(false, fPx + fOccPx, fMyView, bPlacePrev);
+    const FfxFloat32x3 fPlaceCurr = ghostLow(true, fPx - fOccPx, fMyView, bPlaceCurr);
+
+    // only as far as the two real frames agree about the place's broad brightness: a shadow of the world's that moves
+    // with the ground is in one of them there and not in the other, and is left as AMD's method carries it
+    FfxFloat32 fStrength = 0.0f;
+    // (and not in the first interpolated frame after a reset: the frame before's image was not written then)
+    if (bPlacePrev && bPlaceCurr && FrameIndexSinceLastReset() >= 2)
+    {
+        const FfxFloat32 fLumaPrev = RGBToLuma(fPlacePrev);
+        const FfxFloat32 fLumaCurr = RGBToLuma(fPlaceCurr);
+        const FfxFloat32 fApart    = abs(fLumaPrev - fLumaCurr) / (ffxMax(fLumaPrev, fLumaCurr) + GHOST_EPS);
+        fStrength = ffxSaturate(fGhostDisoccluded * GHOST_FADE) * (1.0f - ffxSaturate((fApart - GHOST_AGREE0) / (GHOST_AGREE1 - GHOST_AGREE0)));
+    }
+    if (fStrength > 0.0f)
+    {
+        if (fValid.x > 0.0f && fPrevColor.fBilinearWeightSum > 0.0f)
+        {
+            const FfxFloat32x3 fFetchPrev = ghostLow(false, fPx + fMvPx, fMyView, bFetchPrev);
+            if (bFetchPrev)
+            {
+                fPrevColor.fRaw = ghostShade(false, fPrevColor.fRaw, fPlacePrev, fFetchPrev, fStrength, fUvInScreenSpace, +fOccUv * fUvLetterBoxScale);
+            }
+        }
+        if (fValid.y > 0.0f && fCurrColor.fBilinearWeightSum > 0.0f)
+        {
+            const FfxFloat32x3 fFetchCurr = ghostLow(true, fPx - fMvPx, fMyView, bFetchCurr);
+            if (bFetchCurr)
+            {
+                fCurrColor.fRaw = ghostShade(true, fCurrColor.fRaw, fPlaceCurr, fFetchCurr, fStrength, fUvInScreenSpace, -fOccUv * fUvLetterBoxScale);
+            }
+        }
+    }
+}
+
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    FfxFloat32x2 fDisocclusionFactor = FfxFloat32x2(FFX_EQUAL(ffxSaturate(SampleDisocclusionMask(fLrUvInInterpolationRect).xy), FfxFloat32x2(1.0, 1.0)));
+--- new
+    // (the variant v-ghost) the mask's four channels in one sample: xy as AMD reads them, zw say whether an occluder was found
+    const FfxFloat32x4 fGhostMask = SampleDisocclusionMask(fLrUvInInterpolationRect);
+    FfxFloat32x2 fDisocclusionFactor = FfxFloat32x2(FFX_EQUAL(ffxSaturate(fGhostMask.xy), FfxFloat32x2(1.0, 1.0)));
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    FfxFloat32 fDisoccludedFactor = 0.0f;
+--- new
+    // (the variant v-ghost) only where the mask says an occluder was found; everywhere else nothing below differs from AMD's
+    FfxBoolean bGhost            = false;
+    FfxFloat32 fGhostT           = 0.5f;
+    FfxFloat32 fGhostDisoccluded = 0.0f;
+    if (fGhostMask.z != 0.0f || fGhostMask.w != 0.0f)
+    {
+        bGhost = true;
+        ghostPixel(FfxInt32x2(iPxPos), fUvInScreenSpace, fLrUvInInterpolationRect, gameMv.fMotionVector, fUvLetterBoxScale, fDisocclusionFactor, fPrevColorGame, fCurrColorGame, fGhostT, fGhostDisoccluded);
+    }
+
+    FfxFloat32 fDisoccludedFactor = 0.0f;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+        fDisoccludedFactor = ffxSaturate(1 - ffxMin(fDisocclusionFactor.x, fDisocclusionFactor.y));
+--- new
+        // (the variant v-ghost) where both samples are used, their mix is by their weights: a ramp where AMD switches
+        if (bGhost && fDisocclusionFactor.x > 0.0f && fDisocclusionFactor.y > 0.0f)
+        {
+            t = fGhostT;
+        }
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+        fDisoccludedFactor = ffxSaturate(1 - ffxMin(fDisocclusionFactor.x, fDisocclusionFactor.y));
+        if (bGhost)
+        {
+            fDisoccludedFactor = ffxMax(fDisoccludedFactor, fGhostDisoccluded);
+        }
+--- end

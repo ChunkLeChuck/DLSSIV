@@ -1,0 +1,81 @@
+# THE TWO DEPTH SPLATS LOOK AT A CELL BEFORE THEY TAKE AN ATOMIC ON IT (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. Two passes splat a depth to the four pixels a vector lands between, "the nearest depth wins", by
+# an atomic maximum (inverted depth) or minimum (standard depth) on the depth's bits: the prepare's reconstruct-and-dilate
+# pass into the reconstructed previous depth, and the reconstruct-previous-depth pass into the estimated depth of the
+# generated frame. Four atomics a pixel of the guides in each.
+#
+# THE CUT, the same as fi-game-field-test-first and for the same reason: each image is cleared to the farthest depth
+# before its pass and inside the pass only moves one way, by these atomics alone, and nothing reads it back there. A
+# depth that is not nearer than what a plain load finds in the cell cannot change the cell's final value; the atomic is
+# taken only when it is nearer. The final content is the extreme of the same set of values, whatever the order.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what the two depth splats (P1 and I3) load a cell before the atomic and take it only when their depth is nearer than what is there
+passes ffx_frameinterpolation_reconstruct_and_dilate_pass, ffx_frameinterpolation_reconstruct_previous_depth_pass
+wave64 it edits two shader files that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_dilated_velocity_and_previous_depth.h
+--- old
+void ReconstructPrevDepth(FfxInt32x2 iPxPos, FfxFloat32 fDepth, FfxFloat32x2 fMotionVector, FfxInt32x2 iPxDepthSize)
+{
+--- new
+// (the mod's cut fi-depth-test-first) AMD's UpdateReconstructedDepthPreviousFrame, with a look first: the cell only
+// moves towards the nearest depth in this pass, so the atomic is taken only when this depth is nearer than what a
+// plain load finds there.
+void UpdateReconstructedDepthPreviousFrameTested(FfxInt32x2 iPxSample, FfxFloat32 fDepth)
+{
+    FfxUInt32 uDepth = ffxAsUInt32(fDepth);
+#if FFX_FRAMEINTERPOLATION_OPTION_INVERTED_DEPTH
+    if (rw_reconstructed_depth_previous_frame[iPxSample] < uDepth)
+    {
+        InterlockedMax(rw_reconstructed_depth_previous_frame[iPxSample], uDepth);
+    }
+#else
+    if (rw_reconstructed_depth_previous_frame[iPxSample] > uDepth)
+    {
+        InterlockedMin(rw_reconstructed_depth_previous_frame[iPxSample], uDepth);
+    }
+#endif
+}
+
+void ReconstructPrevDepth(FfxInt32x2 iPxPos, FfxFloat32 fDepth, FfxFloat32x2 fMotionVector, FfxInt32x2 iPxDepthSize)
+{
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_dilated_velocity_and_previous_depth.h
+--- old
+                UpdateReconstructedDepthPreviousFrame(iStorePos, fDepth);
+--- new
+                UpdateReconstructedDepthPreviousFrameTested(iStorePos, fDepth);
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_previous_depth.h
+--- old
+void ReconstructPrevDepth(FfxInt32x2 iPxPos, FfxUInt32 depthTarget, FfxFloat32 fDepth, FfxFloat32x2 fMotionVector, FfxInt32x2 iPxDepthSize)
+{
+--- new
+// (the mod's cut fi-depth-test-first) AMD's UpdateReconstructedDepthInterpolatedFrame, with a look first: see the
+// reconstruct-and-dilate pass's twin.
+void UpdateReconstructedDepthInterpolatedFrameTested(FfxInt32x2 iPxSample, FfxFloat32 fDepth)
+{
+    FfxUInt32 uDepth = ffxAsUInt32(fDepth);
+#if FFX_FRAMEINTERPOLATION_OPTION_INVERTED_DEPTH
+    if (rw_reconstructed_depth_interpolated_frame[iPxSample] < uDepth)
+    {
+        InterlockedMax(rw_reconstructed_depth_interpolated_frame[iPxSample], uDepth);
+    }
+#else
+    if (rw_reconstructed_depth_interpolated_frame[iPxSample] > uDepth)
+    {
+        InterlockedMin(rw_reconstructed_depth_interpolated_frame[iPxSample], uDepth);
+    }
+#endif
+}
+
+void ReconstructPrevDepth(FfxInt32x2 iPxPos, FfxUInt32 depthTarget, FfxFloat32 fDepth, FfxFloat32x2 fMotionVector, FfxInt32x2 iPxDepthSize)
+{
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_previous_depth.h
+--- old
+                    UpdateReconstructedDepthInterpolatedFrame(iSamplePos, fDepth);
+--- new
+                    UpdateReconstructedDepthInterpolatedFrameTested(iSamplePos, fDepth);
+--- end

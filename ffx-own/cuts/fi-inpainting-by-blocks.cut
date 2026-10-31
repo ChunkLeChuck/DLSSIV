@@ -1,0 +1,76 @@
+# THE INPAINTING PASS LOOKS AT 4 BY 4 PIXELS A THREAD, AND WORKS ONLY ON A PIXEL IT CAN CHANGE (2026-10-10, the own
+# build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The last pass runs one thread for every pixel of the display, 8.3 million at 3840x2160. A thread
+# loads the generated colour and the inpainting weight and changes the pixel in at most three cases: the weight asks
+# for inpainting, a HUD-less image is attached and differs there from the presented one, or a debug drawing is asked
+# for. On a frame of the game few pixels ask; the pass costs 62 us all the same.
+#
+# WHAT THE PROBES SAID (stage 3, each with the pass's time): never inpainting 61 us; the weight's load alone and a store
+# that never happens 60; the colour's load alone 60; an empty pass 6. So the 62 us are not the loads and not the
+# inpainting: they are 8.3 million threads that each do next to nothing. And one thread for 4 by 4 pixels running AMD's
+# whole function 16 times was slower, 111 us (the cut fi-inpainting-blocks, left out).
+#
+# THE CUT, FOR A DISPATCH WITH NO HUD-LESS IMAGE AND NO DEBUG DRAWING (the product's shape: the two-image set). One
+# thread for 4 by 4 pixels, a sixteenth of the groups, and for each of its 16 pixels ONE question first: is the pixel's
+# weight above AMD's threshold? Only then is AMD's function called for that pixel, unchanged, and it does there what it
+# did. For every other pixel AMD's function loads two values and stores nothing: not calling it changes nothing. A
+# pixel beyond what AMD's dispatch covered (the display's size rounded up to eight) is never touched, as before.
+#   WITH A HUD-LESS IMAGE ATTACHED, OR A DEBUG DRAWING ASKED FOR, AMD's function may change any pixel, and the pass is
+#   dispatched and runs as AMD's does: one thread a pixel, AMD's call, nothing else. (The first form of this cut used
+#   the blocks there too, and the price said what that costs: every pixel worked on, 16 one after the other in a
+#   thread: on the three-image set the pass took 339 us where AMD's takes 82, in a steady dispatch and in a reset one
+#   alike; as it stands now it takes 85. Both the pass file and ffx_frameinterpolation.cpp decide by the same two values
+#   of the dispatch.)
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts). On a frame where MANY pixels ask for
+# inpainting the 16 pixels of a thread are inpainted one after the other: the same work, less spread out. The bench's
+# picture asks at the edges of what moves, as a game's does; a frame that is all holes was not measured.
+what the inpainting pass (I10), when no HUD-less image is attached and no debug drawing asked for, runs one thread for 4 by 4 pixels and calls AMD's function only for a pixel whose weight asks for inpainting; otherwise it runs as AMD's
+passes ffx_frameinterpolation_inpainting_pass
+wave64 it edits the pass's file, which both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from, and the pass's dispatch in ffx_frameinterpolation.cpp, which runs on every device; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_inpainting_pass.hlsl
+--- old
+    computeInpainting(iPxPos);
+--- new
+    // (the mod's cut fi-inpainting-by-blocks) with a HUD-less image attached or a debug drawing asked for, AMD's function
+    // may change any pixel: one thread a pixel, as AMD dispatches it (ffx_frameinterpolation.cpp decides by the same values)
+    if (GetHUDLessAttachedFactor() == 1
+        || (GetDispatchFlags() & (FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_TEAR_LINES | FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_RESET_INDICATORS)) != 0)
+    {
+        computeInpainting(iPxPos);
+        return;
+    }
+    // otherwise this thread's 4 by 4 pixels, and AMD's function for a pixel whose weight asks for inpainting
+    const FfxInt32x2 iCovered = ((DisplaySize() + 7) / 8) * 8;      // what AMD's dispatch covered: one group for 8 by 8 pixels
+    for (FfxInt32 iBlockY = 0; iBlockY < 4; iBlockY++)
+    {
+        for (FfxInt32 iBlockX = 0; iBlockX < 4; iBlockX++)
+        {
+            const FfxInt32x2 iPx = iPxPos * 4 + FfxInt32x2(iBlockX, iBlockY);
+            if (iPx.x < iCovered.x && iPx.y < iCovered.y)
+            {
+                if (rw_inpainting_mask[iPx] > FFX_FRAMEINTERPOLATION_EPSILON)
+                {
+                    computeInpainting(iPx);
+                }
+            }
+        }
+    }
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+        scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpainting, displayDispatchSizeX, displayDispatchSizeY);
+--- new
+        // (the mod's cut fi-inpainting-by-blocks: with no HUD-less image and no debug drawing a thread of this pass handles
+        // 4 by 4 pixels; the pass file decides by the same two values)
+        if (contextPrivate->constants.HUDLessAttachedFactor == 1
+            || (params->flags & (FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_TEAR_LINES | FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_RESET_INDICATORS)) != 0)
+        {
+            scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpainting, displayDispatchSizeX, displayDispatchSizeY);
+        }
+        else
+        {
+            scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpainting, (displayDispatchSizeX + 3) / 4, (displayDispatchSizeY + 3) / 4);
+        }
+--- end

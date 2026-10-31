@@ -1,0 +1,33 @@
+# THE SEARCH STORES EACH BLOCK'S VECTOR ONCE, NOT SIXTY-FOUR TIMES (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The search runs groups of 64 threads; a group handles four 8 by 8 blocks, one after the other.
+# For each block every thread ends with the same answer (the group's smallest sum of absolute differences, and the same
+# fallback test on the same block sum: both are reduced over the whole group first), and EVERY ONE OF THE 64 THREADS
+# stores that same vector into the same cell of the vector image: 252 stores a group that change nothing, 8.2 million a
+# pair at the finest level.
+#
+# THE CUT. Thread 0 of the group stores it. On a device whose waves are 32 or 64 lanes wide (the only two AMD's
+# reduction is written for: ffx_opticalflow_compute_optical_flow_v5.h 54 and 75) every thread holds the group's answer,
+# so the cell ends with the same value. On any other width AMD's reduction covers one wave only, its threads hold
+# different answers and the last store wins: there every thread still stores, as in AMD's code, so that nothing changes
+# on a device this was not measured on.
+#
+# MEASURED 2026-10-10 (3840x2160 FP16, three rounds, spread 1 us or less; the same images on every hashed pair): the
+# search of level 0 367 -> 369 us, of level 1 100 -> 100, of levels 2 to 6 71 -> 71.
+# LEFT OUT: it saves nothing and reads 2 us slower. The 252 repeated stores a group cost nothing on this card.
+what optical flow's search (O4 to O6) stores a block's vector from one thread of the group, not from all 64 (the same value into the same cell)
+passes ffx_opticalflow_compute_optical_flow_advanced_pass_v5
+wave64 it edits the search's file, from which the cs_6_2 variant and the cs_6_6 one WITH [WaveSize(64)] are both compiled; on a 64-lane device the cut's condition is true for thread 0 alone, as here; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+            {
+                StoreOpticalFlow(ofGroupOffset + blockId, newVector);
+            }
+--- new
+            // (the mod's cut of-search-one-store: every thread of a group holds the same vector here when a wave is 32
+            // or 64 lanes wide; one of them stores it)
+            if (iLocalIndex == 0 || (ffxWaveLaneCount() != 32 && ffxWaveLaneCount() != 64))
+            {
+                StoreOpticalFlow(ofGroupOffset + blockId, newVector);
+            }
+--- end

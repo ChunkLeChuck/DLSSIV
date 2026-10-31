@@ -1,0 +1,36 @@
+# THE GUIDES' IMAGES AT THE CAP (2026-10-25, frame generation round 8, E2; docs\reports\fg-5\opt-2026-10-25\MEMORY-AND-PRESENTER.md,
+# "What could be cut", item 1). A CUT OF THE PRODUCT'S MEMORY THAT WAS MEANT TO BE EXACT AND IS NOT: A PICTURE CUT (CUTS.txt), NOT IN
+# THE PRODUCT. It stands on the accepted picture cut v-guide-cap (the glue refuses it without that cut).
+# WHAT THE PROOFS SAID (2026-10-25, built on the product with v-edge and fi-one-shared-set, 815,104 bytes, SHA-256 7a352800...):
+#   THE JUDGE'S OWN SET (tools\test-fg-own\run.py --ours --new-pictures --pictures-of= the frozen "edge", 4786defe, which has neither
+#   memory cut): every pair of every class equal, all four channels, in DF, QF, D8, Q8 and D3. THE JUDGE IS BLIND TO THIS CUT.
+#   THE OWNER'S DLAA CAPTURE (fg-capture\20261014-153300-mvright, run 1, generated frames 1 to 15, three replays of each library, a
+#   pixel counted where it is steady in the three of each): 7,340 to 9,106 pixels a frame differ (121,570 in 15 frames), from frame 1,
+#   spread over the whole frame (x 14 to 3,839, y 0 to 2,089; some rows carry 150 to 240 of them). The same run with
+#   fi-one-shared-set alone on top of v-edge: 0. So this cut alone changes the picture at DLAA. Where and why is not read: the brief
+#   said stop here (it is a picture cut for the owner's eye, round 8's BRIEF-R8.md, E2).
+#
+# WHAT IT SAVES. 76 to 81 percent of the context is NINE IMAGES AT THE GUIDES' SIZE (46 bytes a guide pixel: the reconstructed depth
+# of the generated frame, the game's and optical flow's vector fields X and Y, the disocclusion mask, and the shared three: the
+# dilated depth, the dilated vectors, the previous frame's nearest depth). At DLAA the guides are the display's size, and since
+# v-guide-cap every pass after the prepare works at two thirds of each axis, so most of each image is never written or read.
+# By the arithmetic of the study: 50.4 MiB at 1080p, 89.7 at 1440p, 202 at 4K, AT DLAA (and any render above two thirds); NOTHING
+# at Quality and below, where the guides are at or under the cap already.
+#
+# THE CUT (glue only, define DLSSIV_FG_CUT_GUIDE_IMAGES_AT_CAP; ffx-own\glue\dlssiv_fg.cpp, GuideImagesAt): where the guides are
+# larger than the cap plus one texel on both axes, AMD's context is told the cap plus one texel as its largest render size; its
+# images and the shared three are sized from it (AMD's getInternalResourceDescriptions and getSharedResourceDescriptions), and so is
+# the memory query (dlssivFgInfo). A prepare larger than that is refused unless v-guide-cap takes it down to the cap (the helper's
+# own always is: its guides are its own textures at the render size).
+# WHY IT IS EXACT. Every read of these images is a load by the pixel inside the render size except one: the disocclusion mask's
+# linear sample at fLrUv = uv x RenderSize / MaxRenderSize. With the texture and MaxRenderSize shrunk together it lands on the same
+# texel; the one texel more keeps that tap, at the last display column and row, on a texel the region never wrote, as at the
+# guides' size. AT 4K AND 1080p the sample's fraction is 1/6, 1/2 or 5/6 of a texel on both axes (the cap is two thirds exactly),
+# never near a step of the sampler's weights between nothing and something, and the mask is binarized (equal to 1). THAT READING WAS
+# WRONG OR INCOMPLETE: the capture above differs (the reading covered the mask's one linear sample and nothing else).
+# AT 2560x1440 DLAA the width's cap is 1707 of 2560 (not two thirds exactly), and 4 of the 2560 display columns sit 0.05 of a 256th of
+# a texel from that step, inside the float arithmetic's rounding: a second reason it could not be proved there.
+what A PICTURE CUT (not exact on the owner's DLAA capture): the nine images the passes after v-guide-cap's prepare work in, and the three shared ones, are made at the cap plus one texel instead of the guides' size where the guides are larger than the cap (DLAA): AMD's context is told that size as its largest render size; nothing at Quality and below
+passes none
+wave64 a change of the glue alone: no shader is compiled otherwise
+define DLSSIV_FG_CUT_GUIDE_IMAGES_AT_CAP

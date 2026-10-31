@@ -1,0 +1,16 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: THE INTERPOLATION PASS'S OWN PICTURE, WITH NOTHING INPAINTED (2026-10-11). The pass says
+# of every pixel that it needs no inpainting, so the inpainting pass fills none and the generated image is the
+# interpolation pass's alone. WHY: the inpainting pass fills a pixel from a pyramid of its whole neighbourhood, so a
+# change of the interpolation pass in one pixel shows in filled pixels far from it. Two libraries with this cut, one
+# with v-ghost and one without, differ exactly where v-ghost's own path ran: held against the gate's map
+# (v-ghost-show-gate) that is the proof that the variant changes nothing outside its gate (tools\test-fg-own\ghost.py).
+what AN INSTRUMENT (the picture changes): the interpolation pass asks for no inpainting anywhere, so the generated image is its own picture alone
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    StoreFrameinterpolationOutput(FfxInt32x2(iPxPos), FfxFloat32x4(fColor, fInPaintingWeight));
+--- new
+    // (the instrument v-show-interpolation-alone)
+    StoreFrameinterpolationOutput(FfxInt32x2(iPxPos), FfxFloat32x4(fColor, 0.0f));
+--- end

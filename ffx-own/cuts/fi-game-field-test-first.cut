@@ -1,0 +1,61 @@
+# THE GAME MOTION VECTOR FIELD PASS LOOKS AT A CELL BEFORE IT TAKES AN ATOMIC ON IT (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The most costly pass of a generated frame (427 us of 1,697 at Quality's guides, 902 of 2,431 at
+# DLAA's) builds the game's vector field by "the highest priority wins": every pixel of the guides hands its packed
+# vector to the four pixels its half vector lands between (eight atomic maxima: the field is two images, X and Y), and
+# then walks back along its vector and hands a lower-priority "secondary" vector to one pixel a step (two atomic maxima
+# a step, each also returning what was there). Measured on this card with one thing changed at a time (the probes of
+# stage 3): the eight primary atomics are 210 us of the 427, the secondary walk 163 us; as plain stores the primary
+# ones would cost 71.
+#
+# THE CUT. A maximum that is already there need not be taken. Before each atomic maximum the cell is loaded (a plain
+# load), and the atomic is taken only when this thread's value is LARGER than what the load saw.
+#   WHY THE FIELD ENDS THE SAME. Inside this pass a cell of the field only ever grows: the setup pass zeroed it, and
+#   every write of this pass is an atomic maximum. A value that is not larger than what a load saw is not larger than
+#   the cell's final value either, so the atomic it skips could not have changed anything. A value that is larger goes
+#   through AMD's own atomic, as before. The final content of both images is the maximum of the same set of values.
+#   THE SECONDARY WALK reads "what was there" to count the primary vectors it meets, and stops after the fourth. AMD's
+#   code takes that from the atomic's returned value; with the cut it is the atomic's returned value where the atomic is
+#   taken, and what the load saw where it is not. Both are a look at a cell that other threads are still writing: which
+#   primary vectors a walk already finds there depends, in AMD's own code, on the order the card runs the threads in
+#   (docs\reports\fg-3\own-build-2026-10-06\critic-plan.md, check 4: "the game vector field has a race"). So for this
+#   half the equality is not an argument, it is a measurement: the judge's whole matrix, every pair, and the same
+#   matrix again.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what the game motion vector field pass (I4) loads a cell before each atomic maximum and takes the atomic only when its value is larger than what is there
+passes ffx_frameinterpolation_game_motion_vector_field_pass
+wave64 it edits one shader file that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; no wave operation; the order a card runs the threads in is that card's, and this was run on one GeForce only
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+                UpdateGameMotionVectorField(iSamplePos, packedVectorPrimary);
+--- new
+                // (the mod's cut fi-game-field-test-first: a cell only grows in this pass; the atomic is taken only
+                // when this value is larger than what a plain load finds there)
+                if (rw_game_motion_vector_field_x[iSamplePos] < packedVectorPrimary.x)
+                {
+                    InterlockedMax(rw_game_motion_vector_field_x[iSamplePos], packedVectorPrimary.x);
+                }
+                if (rw_game_motion_vector_field_y[iSamplePos] < packedVectorPrimary.y)
+                {
+                    InterlockedMax(rw_game_motion_vector_field_y[iSamplePos], packedVectorPrimary.y);
+                }
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+                    const FfxUInt32 uExistingVectorFieldEntry = UpdateGameMotionVectorFieldEx(iSamplePos, packedVectorSecondary);
+--- new
+                    // (the mod's cut fi-game-field-test-first: AMD's UpdateGameMotionVectorFieldEx, with the same look first.
+                    // "What was there" is the atomic's own answer where the atomic is taken, the load's where it is not)
+                    FfxUInt32 uPreviousValueX = rw_game_motion_vector_field_x[iSamplePos];
+                    if (uPreviousValueX < packedVectorSecondary.x)
+                    {
+                        InterlockedMax(rw_game_motion_vector_field_x[iSamplePos], packedVectorSecondary.x, uPreviousValueX);
+                    }
+                    FfxUInt32 uPreviousValueY = rw_game_motion_vector_field_y[iSamplePos];
+                    if (uPreviousValueY < packedVectorSecondary.y)
+                    {
+                        InterlockedMax(rw_game_motion_vector_field_y[iSamplePos], packedVectorSecondary.y, uPreviousValueY);
+                    }
+                    const FfxUInt32 uExistingVectorFieldEntry = ffxMax(uPreviousValueX, uPreviousValueY);
+--- end

@@ -1,0 +1,14 @@
+# A CONTROL, NEVER A CUT OF THE PRODUCT (2026-10-17, frame generation phase 5, package F3: the position t in the library).
+# The cut fi-position makes the generated frame's place between the two real frames a constant of the dispatch, and at
+# the middle (0.5, what every caller asks on 2026-10-17) the judge must find AMD's picture in every pair. That proves
+# the cut exact only if the constant REACHES the shaders: a constant that never arrived would give the middle too. This
+# is the library that asks for another place: our glue, where the caller says the middle (position 0), tells AMD's
+# dispatch 0.4. Everything after the glue is the exact library's: the same clamp, the same field of AMD's dispatch
+# description, the same spare word, the same shaders. Built on the exact library's cuts (build-ffx-own.ps1 -Target
+# dlssiv-fg -Cuts exact,+control-position -OutDir obj\dlssiv-fg-pos); tools\test-fg-own\run.py --ours (step 6c) must
+# find it DIFFERENT from AMD's on every arm whose picture moves (F, FK, F1, FN, FC), and it may equal AMD's only where t
+# cannot show: a reset pair (the current picture is copied) and an arm where nothing moves.
+what THE JUDGE'S CONTROL OF fi-position: the glue tells AMD's dispatch the position 0.4 where the caller says the middle
+passes none
+wave64 it changes our glue alone; it is a control and is never in the product
+define DLSSIV_FG_CUT_POSITION_CONTROL

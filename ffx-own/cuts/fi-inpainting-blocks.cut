@@ -1,0 +1,30 @@
+# THE INPAINTING PASS, ONE THREAD FOR 4 BY 4 PIXELS (2026-10-10, the own build's stage 3). TRIED, AND LEFT OUT.
+#
+# The inpainting pass costs 62 us at 3840x2160 and, on a frame where few pixels ask for inpainting, each of its 8.3
+# million threads does next to nothing. The thought: fewer threads, each looking at 16 pixels (AMD's own function, called
+# 16 times; the dispatch a sixteenth as large). The same values at every pixel.
+#
+# MEASURED 2026-10-10 (3840x2160 FP16, the two-image set, three rounds, spread 1 us or less; the same images on every
+# hashed pair, 120 of 120 at both guide sizes): the inpainting pass 62 -> 111 us at Quality's guides, 62 -> 102 at DLAA's.
+# LEFT OUT: it is slower. The pass is not bound by the number of its threads.
+what the inpainting pass (I10) runs one thread for 4 by 4 pixels, a sixteenth of the threads: tried, slower
+passes ffx_frameinterpolation_inpainting_pass
+wave64 left out; it edits a pass file both variants are compiled from and one line of ffx_frameinterpolation.cpp
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_inpainting_pass.hlsl
+--- old
+    computeInpainting(iPxPos);
+--- new
+    for (FfxInt32 iBlockY = 0; iBlockY < 4; iBlockY++)
+    {
+        for (FfxInt32 iBlockX = 0; iBlockX < 4; iBlockX++)
+        {
+            computeInpainting(iPxPos * 4 + FfxInt32x2(iBlockX, iBlockY));
+        }
+    }
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+        scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpainting, displayDispatchSizeX, displayDispatchSizeY);
+--- new
+        scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpainting, (displayDispatchSizeX + 3) / 4, (displayDispatchSizeY + 3) / 4);
+--- end

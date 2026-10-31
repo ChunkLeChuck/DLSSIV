@@ -1,0 +1,22 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: WHAT THE INTERPOLATION PASS HOLDS OF A PIXEL, AS NUMBERS IN THE PICTURE (2026-10-11; the torn bottom
+# of the tyre, docs\reports\fg-3\desk-2026-10-11-ghost\env). Every pixel of the generated image comes out as three
+# numbers a replay can read back (tools\test-fg-own\tyre.py):
+#   red, green   the game field's half vector at the pixel, in pixels of the display (what the pass fetches its two
+#                samples along)
+#   blue         a code: 1 where the frame before's sample is used, 2 where the current frame's is, 4 where the pass
+#                asks for inpainting, 8 where the vector was filled in from the field's pyramid (no pixel of the
+#                current frame was thrown there), 16 where it is a pixel's second choice
+# and nothing is inpainted, so that the numbers stand.
+what AN INSTRUMENT (the picture changes): every pixel is painted with the game field's half vector (display pixels) and a code of which samples are used and whether inpainting is asked for
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+--- new
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+        // (the instrument v-show-fields)
+        fInterpolatedColor = FfxFloat32x3(gameMv.fMotionVector * fUvLetterBoxScale * FfxFloat32x2(DisplaySize()),
+                                          fDisocclusionFactor.x + 2.0f * fDisocclusionFactor.y + 4.0f * ffxSaturate(fInPaintingWeight) + 8.0f * FfxFloat32(gameMv.bInPainted) + 16.0f * FfxFloat32(gameMv.bSecondary));
+        fInPaintingWeight  = 0.0f;
+--- end

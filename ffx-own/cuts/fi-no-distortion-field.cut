@@ -1,0 +1,44 @@
+# THE DISTORTION FIELD'S LOOKUPS, COMPILED OUT OF THE THREE PASSES THAT MAKE THEM (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The reconstruct-previous-depth pass, the game motion vector field pass and the disocclusion mask
+# pass each sample "the distortion field" (an image an application may hand in when it distorts its picture after
+# rendering) and move the pixel they read by it: one bilinear sample a pixel in the first two, one for each of up to
+# eight depth reads a pixel in the third.
+#
+# WHY THE INPUT IS THE IDENTITY HERE, BY THE SOURCE:
+#   - this library's interface has no distortion field (ffx-own\glue\dlssiv_fg.h: no member for one), and its interpolate
+#     call zero-initialises AMD's dispatch description and never sets distortionField (dlssiv_fg.cpp, dlssivFgInterpolate:
+#     "FfxFrameInterpolationDispatchDescription f{ 0 }");
+#   - with a null distortionField AMD's dispatch binds its own default image instead (ffx_frameinterpolation.cpp at tag
+#     v2.3.0, lines 1054 to 1064 and 1141 to 1144);
+#   - that default image is 1 by 1, R8G8_UNORM, created from the two bytes { 0, 0 } (lines 422 and 423);
+#   - a bilinear sample of a 1 by 1 image of zeroes is (0.0, 0.0) at every coordinate, 0.0 times the render size is 0.0,
+#     and its conversion to a whole number is 0: the offset added to every read position is exactly (0, 0).
+# So the three lookups are replaced by that constant. The shaders no longer name the image, so its binding leaves their
+# reflection (AMD's C++ binds by the names a shader has). The debug view pass keeps its lookup: it draws the field.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what the three distortion-field lookups (I3, I4, I7) are the constant (0, 0): the game hands no distortion field, and AMD's default one is zero
+passes ffx_frameinterpolation_reconstruct_previous_depth_pass, ffx_frameinterpolation_game_motion_vector_field_pass, ffx_frameinterpolation_disocclusion_mask_pass
+wave64 it edits three shader files that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; none of the three uses wave operations; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_previous_depth.h
+--- old
+    const FfxFloat32x2 fDistortionFieldUv = SampleDistortionField(fUv);
+    FfxInt32x2 iDistortionPixelOffset = FfxInt32x2(fDistortionFieldUv.xy * RenderSize());
+--- new
+    const FfxInt32x2 iDistortionPixelOffset = FfxInt32x2(0, 0);    // (the mod's cut fi-no-distortion-field: AMD's default field is zero)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+    const FfxFloat32x2 fDistortionFieldUv          = SampleDistortionField(fUvInScreenSpace);
+    FfxInt32x2 iDistortionPixelOffset              = FfxInt32x2(fDistortionFieldUv.xy * RenderSize());
+--- new
+    const FfxInt32x2 iDistortionPixelOffset        = FfxInt32x2(0, 0);    // (the mod's cut fi-no-distortion-field: AMD's default field is zero)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    const FfxFloat32x2 fDistortionFieldUv = SampleDistortionField(fUv);
+    FfxInt32x2 iDistortionPixelOffset = FfxInt32x2(fDistortionFieldUv.xy * RenderSize());
+--- new
+    const FfxInt32x2 iDistortionPixelOffset = FfxInt32x2(0, 0);    // (the mod's cut fi-no-distortion-field: AMD's default field is zero)
+--- end

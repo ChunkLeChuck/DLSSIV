@@ -1,0 +1,20 @@
+# A VARIANT, NEVER THE PRODUCT: THE GAME'S VECTOR FIELD WITHOUT ITS SECONDARY WALK (2026-10-11; stage 3's report, "For
+# stage 5", item 5: "no secondary walk", about 10 us; the walk changed 27 of 120 pairs on the bench).
+# IT CHANGES THE PICTURE. Built only into a variant library (build-ffx-own.ps1 -Variant).
+#
+# The game motion vector field pass (I4) writes every pixel's vector where the pixel lands half way (the primary
+# vectors) and then walks back along the vector, writing it with a low priority into the cells behind it (the
+# secondary vectors: they exist to give the field's inpainting something better than nothing in the uncovered places).
+# HERE THE WALK IS NOT MADE: an uncovered cell is filled by the field's pyramid from its neighbours alone.
+# NOT BUILT, the other half of item 5: the field as ONE packed image (about 20 us). The two halves of the field are two
+# images because each is raised by an atomic maximum of 32 bits; one image of both would need one atomic over 64 bits,
+# which a texture does not have, so a packed field needs another rule for which vector wins: a design of its own.
+what A VARIANT (the picture changes): the game motion vector field pass (I4) writes no secondary vectors
+passes ffx_frameinterpolation_game_motion_vector_field_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+    const FfxBoolean bWriteSecondaryVectors = length(fMotionVectorHalf * RenderSize()) > FFX_FRAMEINTERPOLATION_EPSILON;
+--- new
+    const FfxBoolean bWriteSecondaryVectors = false;    // (the variant v-game-field-no-secondary)
+--- end

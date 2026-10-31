@@ -1,0 +1,568 @@
+# A VARIANT, NEVER THE PRODUCT: THE GHOST BEHIND THE CAR, FOR THE WHOLE PICTURE, BY THE LIGHT THAT STAYS AT A SCREEN PLACE
+# (THE TEXT OF 2026-10-12: docs\reports\fg-3\sitting-2026-10-12\BRIEF-lib4.md, and lib4\README.md beside it for its
+# numbers. The text the owner ran in the game that morning is v-env-1.cut; the form's own story is in
+# docs\reports\fg-3\desk-2026-10-11-ghost.) IT CHANGES THE PICTURE. Built only into a variant library
+# (build-ffx-own.ps1 -Variant; tools\ffx-own\build_variants.py env, and ship), FROM THE PRODUCT.
+#
+# WHAT AMD'S CODE DOES THERE. The interpolation knows one motion a pixel, the ground's. The car's shadow, glow, shading
+# and reflection lie on that ground and stay with the car on the screen. So a fetched piece of ground arrives with the
+# light of the place it was fetched from: a band of sunlit ground under the car, a second outline behind it.
+#
+# THE VARIANT, in two passes of AMD's and with no pass added:
+#   OPTICAL FLOW'S FIRST PASS (it makes the brightness optical flow searches in: one thread for two by two pixels of the
+#     picture, and it loads their four colours for its own work) also writes THE TWO ENVELOPES of the real frame, AT
+#     THE SAME SCREEN PLACE frame after frame, of three numbers: the log of the brightness (one texel for two by two
+#     pixels, the mean of those pixels: the down-sampling is the blur), and THE TINT, the log of red over brightness
+#     and of blue over brightness (one texel for four by four):
+#         up = max(l, up_before - step)        lo = min(l, lo_before + step)
+#     step is ENV_STEP of the log a real frame of 16.7 ms (it follows the frame time), OR ENV_SHARE OF WHAT IS LEFT TO
+#     GO where that is less (with the plain step a texture whose own contrast is under the step is never forgotten).
+#     Light that stays at a place is in both; a shadow that streams past with the ground is forgotten by `up`, a
+#     passing pool of light by `lo`.
+#     (WHY THIS PASS. v-env-1 wrote them in the disocclusion mask's pass, by a filtered tap of the picture a texel: that
+#     pass then read the whole picture, 63 MiB, for nothing else, and it was most of what the writing cost. Here the
+#     four colours are in hand. The picture is the same one: optical flow is handed the HUD-less image where one is
+#     bound, as the interpolation is.)
+#     Two images a pair (two channels of brightness, four of tint), made by the glue on the shared backend because two
+#     of AMD's effects use them (ffx-own\glue\dlssiv_fg.cpp, DLSSIV_FG_CUT_ENV); the frame before's are the ones the
+#     call before wrote (they change places at every optical flow call). The dispatch of a reset, and the first of
+#     all, writes the frame itself into both and reads nothing.
+#   THE INTERPOLATION PASS, for the two colours fetched along the game's vector, each with its fetch place f and the
+#     place p it is put, and for each of the three numbers: g_up = up(p) - up(f), g_lo = lo(p) - lo(f); the gain
+#     needed is the smaller of the two in size where they agree in sign and 0 where they do not (the brightness's held
+#     within log 1/16 and log 16, a tint's within ENV_TINT_MOST).
+#     THE DEAD BAND IS NOT ONE NUMBER: a gain is believed only as far as it stands out of what the place and the fetch
+#     place have themselves been seen to vary by, the gap between their two envelopes (the larger of the two gaps,
+#     and ENV_GATE_WIDTH more): nothing under ENV_GATE_0 times that, whole from ENV_GATE_1 times that on. Where
+#     nothing is believed the pixel takes THE PRODUCT'S PATH EXACTLY: no colour and no weight is touched.
+#     Else each sample's red, green and blue are multiplied by exp(the brightness's gain and the tints' in it), and
+#     where two samples are blended each one's share is multiplied by exp(-|what it needed| / ENV_TRUST): the sample
+#     that needed the least relighting is believed.
+#     THE TINT RIDES ON THE BRIGHTNESS: its image is fetched only where a sample's brightness is believed (more than
+#     ENV_LEAST); a difference of colour alone, with no difference of brightness to carry it, is left to the product.
+#     NO FLARE: a relit sample is never brighter than ENV_OVER times the brightest the place itself has been seen, unless
+#     it was so before it was relit.
+#     Nothing is done in the dispatch of a reset (AMD's pass copies the real frame there) nor in the ENV_FRAME_0 frames
+#     after it; whole from ENV_FRAME_1 frames after it on. Nothing is done where the game's vector is zero.
+#   The two colours fetched along optical flow's own vector are left as they are (where that vector is the game's
+#     they are the game's two, relit).
+#
+# THE THREE MENDS OF 2026-10-12, each one marked block of the text below (v-env-less-creep.cut, v-env-less-apart.cut and
+# v-env-less-moved.cut take one out each, to judge and to price it by itself). WHAT WAS LEFT in the game, "near where
+# the back bumper and the tyre meet, projected onto the road", is THE CAR'S OWN SHADOW WHERE IT HAS JUST ARRIVED: the car
+# shifts on the screen a pixel or two a frame, its shadow and its outline with it, and at a place the shadow reached
+# a few frames ago the upper envelope is still on its way down from the sunlight (a quarter of the log a frame: a
+# dozen frames for a hard shadow), so the ground put there was relit by a part of what it needed, or by nothing.
+#   MEND 1, THE BANDS APART (the interpolation). A gain is also believed where everything the place has been seen to
+#     hold lies on one side of everything the fetch place has, however wide the place's own band is.
+#   MEND 2, NOTHING FOR A SAMPLE THAT HARDLY MOVES (the interpolation). A thing that stands nearly still on the screen
+#     carries its own edges and shading with it; the envelopes' slope across them is not a light it moves through.
+#   MEND 3, THE ENVELOPES CREEP (the writing; the one that takes what was left away). Where the frame lies under the
+#     upper envelope, that envelope may not stay more than ENV_CREEP_SLACK above the lowest one ENV_CREEP texels away:
+#     what has sunk next door has sunk here. A shadow that creeps takes its envelope along (up to 4 pixels a frame);
+#     one that streams past with the ground outruns it. The same for the lower envelope and light that creeps.
+#
+# A PICTURE OF sRGB VALUES (no HDR): the envelopes hold 2.2 times the logs of the raw values, and a gain is taken to the
+# power 1 / 2.2 for the raw colour. NOT RUN: every captured run is HDR (scRGB).
+#
+# NO NEW KIND OF CALL (Linux: plain Direct3D 12 that vkd3d-proton has): loads of a texture by its texel (the picture's
+# colours, which the pass loads already; the envelopes of the frame before), filtered samples of one level
+# (SampleLevel through AMD's own linear, clamped sampler), stores into float images of two and four channels through
+# unordered access views that are never read through them (R16G16_FLOAT and R16G16B16A16_FLOAT, both formats AMD's own
+# passes already write so), one constant more in optical flow's constant buffer, log, exp, smoothstep, min, max,
+# clamp, dot; the four images are made, handed over and put back in their state by AMD's own backend calls, as its
+# optical flow vectors are. No gather, no wave operation, no atomic, no typed load from an unordered access view.
+what A VARIANT (the picture changes): each sample of the interpolation is relit for the place it is put, by two envelopes of the real frames' log brightness and tint kept at the screen place, where that stands out of what the two places have been seen to vary by
+passes ffx_frameinterpolation_pass, ffx_opticalflow_compute_luminance_pyramid_pass, ffx_opticalflow_compute_optical_flow_advanced_pass_v5, ffx_opticalflow_compute_scd_divergence_pass, ffx_opticalflow_filter_optical_flow_pass_v5, ffx_opticalflow_generate_scd_histogram_pass, ffx_opticalflow_prepare_luma_pass, ffx_opticalflow_scale_optical_flow_advanced_pass_v5
+wave64 the same edits in both variants: no wave operation; not run here on a wave64 device
+define DLSSIV_FG_CUT_ENV
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_callbacks_hlsl.h
+--- old
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK
+--- new
+// (the variant v-env) the two envelopes of the real frames' log brightness (x the upper one, y the lower one), and of
+// their tint (x and y: the upper and the lower one of log red over brightness; z and w: of log blue over brightness)
+#ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_ENV_CURRENT
+    Texture2D<FfxFloat32x2> r_env_current FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_ENV_CURRENT);
+
+    FfxFloat32x2 SampleEnvCurrent(FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        return r_env_current.SampleLevel(s_LinearClamp, fUv, 0).xy;
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_SRV_ENV_TINT_CURRENT
+    Texture2D<FfxFloat32x4> r_env_tint_current FFX_DECLARE_SRV(FFX_FRAMEINTERPOLATION_BIND_SRV_ENV_TINT_CURRENT);
+
+    FfxFloat32x4 SampleEnvTintCurrent(FFX_PARAMETER_IN FfxFloat32x2 fUv)
+    {
+        return r_env_tint_current.SampleLevel(s_LinearClamp, fUv, 0);
+    }
+#endif
+
+#ifdef FFX_FRAMEINTERPOLATION_BIND_UAV_DISOCCLUSION_MASK
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_COUNTERS                                8
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_COUNTERS                                8
+// (the variant v-env) the envelopes of the real frames' log brightness and tint, as this pair's optical flow call wrote them
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_ENV_CURRENT                             9
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_ENV_TINT_CURRENT                        10
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_COUNTERS,                                   L"r_counters"},
+--- new
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_COUNTERS,                                   L"r_counters"},
+    // (the variant v-env) the two images of the envelopes, under two identifiers AMD keeps in reserve
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3,                                 L"r_env_current"},
+    {FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_5,                                 L"r_env_tint_current"},
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+    // set optical flow buffers
+--- new
+    // (the variant v-env) the two images of the envelopes that this pair's optical flow call wrote: the caller hands them over
+    contextPrivate->contextDescription.backendInterface.fpRegisterResource(&contextPrivate->contextDescription.backendInterface, &params->envCurrent, contextPrivate->effectContextId, &contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_3]);
+    contextPrivate->contextDescription.backendInterface.fpRegisterResource(&contextPrivate->contextDescription.backendInterface, &params->envTintCurrent, contextPrivate->effectContextId, &contextPrivate->srvResources[FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_RESERVED_5]);
+
+    // set optical flow buffers
+--- end
+file framegeneration/fsr3/include/ffx_frameinterpolation.h
+--- old
+    FfxApiResource                         opticalFlowSceneChangeDetection;    ///< The optical flow scene change detection data
+--- new
+    FfxApiResource                         opticalFlowSceneChangeDetection;    ///< The optical flow scene change detection data
+    // (the variant v-env) the two images of the envelopes as this pair's optical flow call wrote them
+    FfxApiResource                         envCurrent;
+    FfxApiResource                         envTintCurrent;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- new
+// (the variant v-env) EVERYTHING BELOW, TO updateInPaintingWeight: THE TWO SAMPLES ALONG THE GAME'S VECTOR, EACH RELIT FOR THE PLACE IT IS PUT.
+// Three numbers a place, each with its upper and its lower envelope: the log brightness, the log of red over
+// brightness, the log of blue over brightness.
+FFX_STATIC const FfxInt32   ENV_TEXEL         = 2;          // as optical flow's first pass writes the envelopes
+FFX_STATIC const FfxFloat32 ENV_SRGB          = 2.2f;
+FFX_STATIC const FfxFloat32 ENV_GAIN_MOST     = 2.7726f;    // log 16: the brightness's gain is held within 1/16 and 16
+FFX_STATIC const FfxFloat32 ENV_TINT_MOST     = 1.0f;       // a tint's gain is held within 1/e and e
+FFX_STATIC const FfxFloat32 ENV_OVER          = 2.0f;       // a relit sample is at most this times the brightest the place has been seen
+FFX_STATIC const FfxFloat32 ENV_TRUST         = 0.3f;       // a sample's share is multiplied by exp(-|what it needed| / this)
+FFX_STATIC const FfxFloat32 ENV_GATE_WIDTH    = 0.05f;      // this is added to the gap between a place's two envelopes
+FFX_STATIC const FfxFloat32 ENV_GATE_0        = 0.4f;       // nothing where a gain is under this times that
+FFX_STATIC const FfxFloat32 ENV_GATE_1        = 0.8f;       // whole from this times that on
+FFX_STATIC const FfxFloat32 ENV_APART_0       = 0.0f;       // (mend 1) nothing where the two places' bands lie less than this apart
+FFX_STATIC const FfxFloat32 ENV_APART_1       = 0.25f;      // whole from this on
+FFX_STATIC const FfxFloat32 ENV_FRAME_0       = 3.0f;       // nothing in this many frames after a reset
+FFX_STATIC const FfxFloat32 ENV_FRAME_1       = 7.0f;       // whole from this many frames after it on
+FFX_STATIC const FfxFloat32 ENV_MOVED_0       = 0.5f;       // (mend 2) nothing where the half vector is shorter than this, in pixels of the display
+FFX_STATIC const FfxFloat32 ENV_MOVED_1       = 2.0f;       // whole from this on
+FFX_STATIC const FfxFloat32 ENV_LEAST         = 0.02f;      // the tint is fetched where a sample's brightness is believed more than this
+
+// one number of one sample: how far its gain is believed (0 to 1), and the gain it needs (log), from the two
+// envelopes (x the upper one, y the lower one) at the place it is put and at the place it was fetched. The gain is the
+// smaller of the two envelopes' differences where they agree in sign, and none where they do not. THE DEAD BAND IS NOT
+// ONE NUMBER: a gain is believed only as far as it stands out of what the two places have themselves been seen to
+// vary by, the gap between their two envelopes (the larger of the two gaps, and ENV_GATE_WIDTH more).
+FfxFloat32 envOne(FfxFloat32x2 fPlace, FfxFloat32x2 fFetch, FfxFloat32 fMost, out FfxFloat32 fNeeded)
+{
+    const FfxFloat32x2 fBy = fPlace - fFetch;
+    fNeeded = 0.0f;
+    if (fBy.x * fBy.y > 0.0f)
+    {
+        fNeeded = clamp(abs(fBy.x) < abs(fBy.y) ? fBy.x : fBy.y, -fMost, fMost);
+    }
+    const FfxFloat32 fGap = ffxMax(ffxMax(fPlace.x - fPlace.y, fFetch.x - fFetch.y), 0.0f);
+    FfxFloat32 fBelieved = smoothstep(ENV_GATE_0, ENV_GATE_1, abs(fNeeded) / (fGap + ENV_GATE_WIDTH));
+    // (MEND 1, THE BANDS APART) a gain is also believed where everything the place has been seen to hold lies on one side of
+    // everything the fetch place has: the place's own band may then be as wide as it likes (the car's outline that
+    // stood over it some frames ago is still in one envelope) and the two places still do not hold the same light
+    fBelieved = ffxMax(fBelieved, smoothstep(ENV_APART_0, ENV_APART_1, ffxMax(fPlace.y - fFetch.x, fFetch.y - fPlace.x)));
+    return fBelieved;
+}
+
+// what a sample's red, green and blue are multiplied by, for its three gains (log): the brightness's on all three, the
+// tints' on red and on blue, and on green what keeps a grey's brightness
+FfxFloat32x3 envGain(FfxFloat32x3 fGain)
+{
+    return exp(FfxFloat32x3(fGain.x + fGain.y, fGain.x - (0.2126f * fGain.y + 0.0722f * fGain.z) / 0.7152f, fGain.x + fGain.z));
+}
+
+// THE PIXEL: true where a sample was relit; then fEnvT is the current frame's share by the two samples' trust and
+// fEnvShare how far the pixel takes it. False: nothing was touched, and the pixel is the product's.
+FfxBoolean envRelight(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, inout FfxFloat32x3 fPrevRaw, inout FfxFloat32x3 fCurrRaw, out FfxFloat32 fEnvT, out FfxFloat32 fEnvShare)
+{
+    fEnvT     = 0.5f;
+    fEnvShare = 0.0f;
+
+    const FfxFloat32x2 fSize  = FfxFloat32x2(DisplaySize());
+    const FfxFloat32x2 fHalf  = fHalfUv * fSize;
+    FfxFloat32 fGrown = ffxSaturate((FfxFloat32(FrameIndexSinceLastReset()) - ENV_FRAME_0) / (ENV_FRAME_1 - ENV_FRAME_0));
+    // (MEND 2, NOTHING FOR A SAMPLE THAT HARDLY MOVES) a thing that stands nearly still on the screen (the car itself, a far hill)
+    // carries its own edges and its own shading with it, and the envelopes' slope across such an edge is not a light
+    // it moves through. Nothing under a half vector of ENV_MOVED_0 pixels of the display, whole from ENV_MOVED_1 on
+    fGrown *= smoothstep(ENV_MOVED_0 * ENV_MOVED_0, ENV_MOVED_1 * ENV_MOVED_1, dot(fHalf, fHalf));
+    // (nothing in the frames after a reset; nothing where the vector is zero: the fetch place is the place)
+    if (fGrown <= 0.0f || (fHalfUv.x == 0.0f && fHalfUv.y == 0.0f))
+    {
+        return false;
+    }
+
+    // the images hold a texel for ENV_TEXEL pixels (the tint's for twice that), rounded up: their own UV of a display UV
+    const FfxFloat32x4 fScale = FfxFloat32x4(fSize / FfxFloat32x2(((DisplaySize() + (ENV_TEXEL - 1)) / ENV_TEXEL) * ENV_TEXEL), fSize / FfxFloat32x2(((DisplaySize() + (2 * ENV_TEXEL - 1)) / (2 * ENV_TEXEL)) * (2 * ENV_TEXEL)));
+
+    // the brightness: at the place, and at the two samples' fetch places
+    FfxFloat32x3 fNeedPrev;
+    FfxFloat32x3 fNeedCurr;
+    FfxFloat32x3 fBelievedPrev;
+    FfxFloat32x3 fBelievedCurr;
+    const FfxFloat32x2 fLogPlace = SampleEnvCurrent(fUv * fScale.xy);
+    fBelievedPrev.x = envOne(fLogPlace, SampleEnvCurrent((fUv + fHalfUv) * fScale.xy), ENV_GAIN_MOST, fNeedPrev.x);
+    fBelievedCurr.x = envOne(fLogPlace, SampleEnvCurrent((fUv - fHalfUv) * fScale.xy), ENV_GAIN_MOST, fNeedCurr.x);
+    // THE TINT RIDES ON THE BRIGHTNESS: where neither sample's brightness is relit the tint's image is not fetched and the
+    // pixel is the product's (a difference of colour alone, with no difference of brightness to carry it, is left)
+    if (ffxMax(fBelievedPrev.x, fBelievedCurr.x) <= ENV_LEAST)
+    {
+        return false;
+    }
+
+    // the tint (x and y: red over brightness; z and w: blue over brightness)
+    const FfxFloat32x4 fTintPlace = SampleEnvTintCurrent(fUv * fScale.zw);
+    const FfxFloat32x4 fTintPrev  = SampleEnvTintCurrent((fUv + fHalfUv) * fScale.zw);
+    const FfxFloat32x4 fTintCurr  = SampleEnvTintCurrent((fUv - fHalfUv) * fScale.zw);
+    fBelievedPrev.y = envOne(fTintPlace.xy, fTintPrev.xy, ENV_TINT_MOST, fNeedPrev.y);
+    fBelievedPrev.z = envOne(fTintPlace.zw, fTintPrev.zw, ENV_TINT_MOST, fNeedPrev.z);
+    fBelievedCurr.y = envOne(fTintPlace.xy, fTintCurr.xy, ENV_TINT_MOST, fNeedCurr.y);
+    fBelievedCurr.z = envOne(fTintPlace.zw, fTintCurr.zw, ENV_TINT_MOST, fNeedCurr.z);
+
+    fBelievedPrev *= fGrown;
+    fBelievedCurr *= fGrown;
+    const FfxFloat32x3 fMost = ffxMax(fBelievedPrev, fBelievedCurr);
+    fEnvShare = ffxMax(fMost.x, ffxMax(fMost.y, fMost.z));
+    if (fEnvShare <= 0.0f)
+    {
+        return false;
+    }
+
+    const FfxFloat32   fPower   = BackBufferTransferFunction() == 0 ? 1.0f / ENV_SRGB : 1.0f;
+    const FfxFloat32x2 fWasLuma = FfxFloat32x2(RGBToLuma(fPrevRaw), RGBToLuma(fCurrRaw));
+    fPrevRaw *= envGain(fNeedPrev * fBelievedPrev * fPower);
+    fCurrRaw *= envGain(fNeedCurr * fBelievedCurr * fPower);
+    // NO FLARE: a relit sample is never brighter than ENV_OVER times the brightest the place itself has been seen (its upper
+    // envelope), unless it was so before: a bright speck of the ground, put on a place that is far brighter than the
+    // ground (the game's own interface, where no HUD-less image is bound), does not come out many times as bright
+    const FfxFloat32 fOver = ENV_OVER * exp(fLogPlace.x * fPower);
+    fPrevRaw *= ffxMin(1.0f, ffxMax(fWasLuma.x, fOver) / ffxMax(RGBToLuma(fPrevRaw), 1.0e-6f));
+    fCurrRaw *= ffxMin(1.0f, ffxMax(fWasLuma.y, fOver) / ffxMax(RGBToLuma(fCurrRaw), 1.0e-6f));
+
+    const FfxFloat32 fTrustPrev = exp(-(abs(fNeedPrev.x) + abs(fNeedPrev.y) + abs(fNeedPrev.z)) / ENV_TRUST);
+    const FfxFloat32 fTrustCurr = exp(-(abs(fNeedCurr.x) + abs(fNeedCurr.y) + abs(fNeedCurr.z)) / ENV_TRUST);
+    fEnvT = fTrustCurr / (fTrustPrev + fTrustCurr);
+    return true;
+}
+
+void updateInPaintingWeight(inout FfxFloat32 fInPaintingWeight, FfxFloat32 fFactor)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    // (the mod's cut fi-interpolation-same-vector-once: the same function of the same arguments is not computed twice)
+--- new
+    // (the variant v-env) the two samples along the game's vector, each relit for the place it is put; where nothing is
+    // believed nothing is touched
+    FfxFloat32 fEnvT     = 0.5f;
+    FfxFloat32 fEnvShare = 0.0f;
+    const FfxBoolean bEnv = envRelight(fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale, fPrevColorGame.fRaw, fCurrColorGame.fRaw, fEnvT, fEnvShare);
+
+    // (the mod's cut fi-interpolation-same-vector-once: the same function of the same arguments is not computed twice)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+--- new
+        // (the variant v-env) where both samples are used and the pixel is relit, the one that needed the least relighting is believed
+        if (bEnv && fDisocclusionFactor.x > 0.0f && fDisocclusionFactor.y > 0.0f)
+        {
+            t = ffxLerp(t, fEnvT, fEnvShare);
+        }
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+--- end
+file framegeneration/fsr3/include/ffx_opticalflow.h
+--- old
+    FfxApiFloatCoords2D minMaxLuminance;
+} FfxOpticalflowDispatchDescription;
+--- new
+    FfxApiFloatCoords2D minMaxLuminance;
+    // (the variant v-env) the four images of the envelopes (the frame before's are read, this frame's written), and the frame's time
+    FfxApiResource      envPrevious;
+    FfxApiResource      envCurrent;
+    FfxApiResource      envTintPrevious;
+    FfxApiResource      envTintCurrent;
+    float               envFrameTimeMs;
+} FfxOpticalflowDispatchDescription;
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow_private.h
+--- old
+    FFX_OF_BINDING_IDENTIFIER_SHARED_OPTICAL_FLOW_SCD_OUTPUT,
+
+    FFX_OF_BINDING_IDENTIFIER_COUNT
+--- new
+    FFX_OF_BINDING_IDENTIFIER_SHARED_OPTICAL_FLOW_SCD_OUTPUT,
+
+    // (the variant v-env)
+    FFX_OF_BINDING_IDENTIFIER_ENV_PREVIOUS,
+    FFX_OF_BINDING_IDENTIFIER_ENV_CURRENT,
+    FFX_OF_BINDING_IDENTIFIER_ENV_TINT_PREVIOUS,
+    FFX_OF_BINDING_IDENTIFIER_ENV_TINT_CURRENT,
+
+    FFX_OF_BINDING_IDENTIFIER_COUNT
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow_private.h
+--- old
+    float minMaxLuminance[2];
+} OpticalflowConstants;
+--- new
+    float minMaxLuminance[2];
+    // (the variant v-env) the frame's time over 16.7 ms, held within a quarter and four; and what fills the row of four
+    float envRate;
+    uint32_t envPad[3];
+} OpticalflowConstants;
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+    {FFX_OF_BINDING_IDENTIFIER_INPUT_COLOR,                           L"r_input_color"},
+--- new
+    {FFX_OF_BINDING_IDENTIFIER_INPUT_COLOR,                           L"r_input_color"},
+    // (the variant v-env)
+    {FFX_OF_BINDING_IDENTIFIER_ENV_PREVIOUS,                          L"r_env_previous"},
+    {FFX_OF_BINDING_IDENTIFIER_ENV_TINT_PREVIOUS,                     L"r_env_tint_previous"},
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+    {FFX_OF_BINDING_IDENTIFIER_OPTICAL_FLOW_INPUT,                      L"rw_optical_flow_input"},
+--- new
+    {FFX_OF_BINDING_IDENTIFIER_OPTICAL_FLOW_INPUT,                      L"rw_optical_flow_input"},
+    // (the variant v-env)
+    {FFX_OF_BINDING_IDENTIFIER_ENV_CURRENT,                             L"rw_env_current"},
+    {FFX_OF_BINDING_IDENTIFIER_ENV_TINT_CURRENT,                        L"rw_env_tint_current"},
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+    FfxCommandList commandList = params->commandList;
+    int advancedAlgorithmIterations = 7;
+--- new
+    // (the variant v-env) the four images of the envelopes: the frame before's two are read by the first pass, this frame's two written
+    context->contextDescription.backendInterface.fpRegisterResource(&context->contextDescription.backendInterface, &params->envPrevious, context->effectContextId, &context->srvBindings[FFX_OF_BINDING_IDENTIFIER_ENV_PREVIOUS]);
+    context->contextDescription.backendInterface.fpRegisterResource(&context->contextDescription.backendInterface, &params->envTintPrevious, context->effectContextId, &context->srvBindings[FFX_OF_BINDING_IDENTIFIER_ENV_TINT_PREVIOUS]);
+    context->contextDescription.backendInterface.fpRegisterResource(&context->contextDescription.backendInterface, &params->envCurrent, context->effectContextId, &context->uavBindings[FFX_OF_BINDING_IDENTIFIER_ENV_CURRENT]);
+    context->contextDescription.backendInterface.fpRegisterResource(&context->contextDescription.backendInterface, &params->envTintCurrent, context->effectContextId, &context->uavBindings[FFX_OF_BINDING_IDENTIFIER_ENV_TINT_CURRENT]);
+
+    FfxCommandList commandList = params->commandList;
+    int advancedAlgorithmIterations = 7;
+--- end
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+    context->constants.backbufferTransferFunction = params->backbufferTransferFunction;
+--- new
+    context->constants.backbufferTransferFunction = params->backbufferTransferFunction;
+    // (the variant v-env) the envelopes' step follows the frame's time
+    {
+        const float envRate = params->envFrameTimeMs * (1.0f / 16.667f);
+        context->constants.envRate = envRate < 0.25f ? 0.25f : envRate > 4.0f ? 4.0f : envRate;
+    }
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_callbacks_hlsl.h
+--- old
+        FfxUInt32 backbufferTransferFunction;
+        FfxFloat32x2 minMaxLuminance;
+    };
+#define FFX_OPTICALFLOW_CONSTANT_BUFFER_1_SIZE 8
+--- new
+        FfxUInt32 backbufferTransferFunction;
+        FfxFloat32x2 minMaxLuminance;
+        // (the variant v-env) the frame's time over 16.7 ms; and what fills the row of four
+        FfxFloat32 fEnvRate;
+        FfxUInt32x3 uEnvPad;
+    };
+#define FFX_OPTICALFLOW_CONSTANT_BUFFER_1_SIZE 12
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_callbacks_hlsl.h
+--- old
+    #if defined FFX_OPTICALFLOW_BIND_SRV_INPUT_COLOR
+        Texture2D<FfxFloat32x4>                   r_input_color                       FFX_DECLARE_SRV(FFX_OPTICALFLOW_BIND_SRV_INPUT_COLOR);
+    #endif
+--- new
+    #if defined FFX_OPTICALFLOW_BIND_SRV_INPUT_COLOR
+        Texture2D<FfxFloat32x4>                   r_input_color                       FFX_DECLARE_SRV(FFX_OPTICALFLOW_BIND_SRV_INPUT_COLOR);
+    #endif
+    // (the variant v-env) the two envelopes of the real frames' log brightness (x the upper one, y the lower one), and of their
+    // tint (x and y: the upper and the lower one of log red over brightness; z and w: of log blue over brightness)
+    #if defined FFX_OPTICALFLOW_BIND_SRV_ENV_PREVIOUS
+        Texture2D<FfxFloat32x2>                   r_env_previous                      FFX_DECLARE_SRV(FFX_OPTICALFLOW_BIND_SRV_ENV_PREVIOUS);
+    #endif
+    #if defined FFX_OPTICALFLOW_BIND_SRV_ENV_TINT_PREVIOUS
+        Texture2D<FfxFloat32x4>                   r_env_tint_previous                 FFX_DECLARE_SRV(FFX_OPTICALFLOW_BIND_SRV_ENV_TINT_PREVIOUS);
+    #endif
+    #if defined FFX_OPTICALFLOW_BIND_UAV_ENV_CURRENT
+        RWTexture2D<FfxFloat32x2>                 rw_env_current                      FFX_DECLARE_UAV(FFX_OPTICALFLOW_BIND_UAV_ENV_CURRENT);
+    #endif
+    #if defined FFX_OPTICALFLOW_BIND_UAV_ENV_TINT_CURRENT
+        RWTexture2D<FfxFloat32x4>                 rw_env_tint_current                 FFX_DECLARE_UAV(FFX_OPTICALFLOW_BIND_UAV_ENV_TINT_CURRENT);
+    #endif
+--- end
+file framegeneration/fsr3/internal/shaders/ffx_opticalflow_prepare_luma_pass.hlsl
+--- old
+#define FFX_OPTICALFLOW_BIND_SRV_INPUT_COLOR           0
+--- new
+#define FFX_OPTICALFLOW_BIND_SRV_INPUT_COLOR           0
+// (the variant v-env) the envelopes the pair before wrote, and this pair's
+#define FFX_OPTICALFLOW_BIND_SRV_ENV_PREVIOUS          1
+#define FFX_OPTICALFLOW_BIND_SRV_ENV_TINT_PREVIOUS     2
+#define FFX_OPTICALFLOW_BIND_UAV_ENV_CURRENT           1
+#define FFX_OPTICALFLOW_BIND_UAV_ENV_TINT_CURRENT      2
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_prepare_luma.h
+--- old
+void PrepareLuma(FfxInt32x2 iGlobalId, FfxInt32 iLocalIndex)
+{
+#define PixelsPerThreadX 2
+#define PixelsPerThreadY 2
+--- new
+// (the variant v-env) THE TWO ENVELOPES OF THE CURRENT REAL FRAME, one texel of the brightness a thread: this pass has a thread for
+// two by two pixels of the picture and loads the four colours for its own work; their mean is the texel. A texel of
+// the tint is the mean of two by two of those, written by the thread of its first one. Every value is held within a
+// floor and a ceiling, so that no log of nothing and no infinity ever enters an image. Each envelope sinks or rises
+// towards the frame by ENV_STEP a real frame of 16.7 ms, or by ENV_SHARE of what is left where that is less.
+FFX_STATIC const FfxFloat32 ENV_STEP       = 0.25f;
+FFX_STATIC const FfxFloat32 ENV_SHARE      = 0.3f;
+FFX_STATIC const FfxFloat32 ENV_SHARE_MOST = 0.9f;      // (a share of 1 is the plain step: all that is left where that is less)
+FFX_STATIC const FfxFloat32 ENV_FLOOR      = 1.0e-5f;
+FFX_STATIC const FfxFloat32 ENV_CEILING    = 6.0e4f;
+FFX_STATIC const FfxFloat32 ENV_TINT_FLOOR = 1.0e-3f;   // added to both sides of a tint's ratio: in the dark there is no tint
+FFX_STATIC const FfxFloat32 ENV_SRGB       = 2.2f;      // an sRGB picture's brightness is its raw value to this power, about
+FFX_STATIC const FfxInt32   ENV_CREEP       = 2;        // (mend 3) how many texels away an envelope looks at its neighbours
+FFX_STATIC const FfxFloat32 ENV_CREEP_SLACK = 0.3f;      // and how far above (below) theirs it may stay
+
+// an envelope a step nearer the frame: bUpper the upper one (it sinks), else the lower one (it rises)
+FfxFloat32 envStep(FfxFloat32 fNow, FfxFloat32 fBefore, FfxFloat32 fStep, FfxFloat32 fShare, FfxBoolean bUpper)
+{
+    if (bUpper)
+    {
+        return ffxMax(fNow, fBefore - ffxMin(fStep, fShare * (fBefore - fNow)));
+    }
+    return ffxMin(fNow, fBefore + ffxMin(fStep, fShare * (fNow - fBefore)));
+}
+
+FfxFloat32 envLuma(FfxFloat32x3 fColour)
+{
+    return 0.2126f * fColour.x + 0.7152f * fColour.y + 0.0722f * fColour.z;
+}
+
+// the mean colour of the two by two pixels of another thread's texel (at the picture's edge: the last texel's, the last pixel's)
+FfxFloat32x3 envTexel(FfxInt32x2 iTexel, FfxInt32x2 iSize)
+{
+    const FfxInt32x2 iPx   = min(iTexel, iSize - 1) * 2;
+    const FfxInt32x2 iLast = iInputLumaResolution - 1;
+    return (LoadInputColor(min(iPx, iLast)).rgb + LoadInputColor(min(iPx + FfxInt32x2(1, 0), iLast)).rgb + LoadInputColor(min(iPx + FfxInt32x2(0, 1), iLast)).rgb + LoadInputColor(min(iPx + FfxInt32x2(1, 1), iLast)).rgb) * 0.25f;
+}
+
+// fColour: the mean colour of the thread's own pixels
+void envOfThread(FfxInt32x2 iTexel, FfxFloat32x3 fColour)
+{
+    const FfxInt32x2 iSize = (iInputLumaResolution + 1) / 2;
+    if (iTexel.x >= iSize.x || iTexel.y >= iSize.y)
+    {
+        return;
+    }
+
+    const FfxFloat32 fStep  = ENV_STEP * fEnvRate;
+    const FfxFloat32 fShare = ffxMin(ENV_SHARE * fEnvRate, ENV_SHARE_MOST);
+    const FfxFloat32 fPower = BackbufferTransferFunction() == 0 ? ENV_SRGB : 1.0f;
+    const FfxBoolean bFirst = FrameIndex() == 0;        // the dispatch of a reset, and the first of all: nothing is taken from the images before
+
+    const FfxFloat32 fLog = log(clamp(envLuma(fColour), ENV_FLOOR, ENV_CEILING)) * fPower;
+    FfxFloat32x2 fEnv = FfxFloat32x2(fLog, fLog);
+    if (!bFirst)
+    {
+        const FfxFloat32x2 fBefore = r_env_previous[iTexel];
+        fEnv.x = envStep(fLog, fBefore.x, fStep, fShare, true);
+        fEnv.y = envStep(fLog, fBefore.y, fStep, fShare, false);
+
+        // (MEND 3, THE ENVELOPES CREEP) A LIGHT THAT STAYS WITH A THING THAT SHIFTS ON THE SCREEN (the car's own shadow as the car drifts a
+        // pixel or two a frame) covers new places all the time, and there the upper envelope would take a dozen frames
+        // to sink to it. Where the frame lies under the upper envelope, that envelope may not stay more than
+        // ENV_CREEP_SLACK above the lowest one ENV_CREEP texels away: what has sunk next door has sunk here. A shadow that
+        // streams past with the ground outruns this (its neighbours were lit a frame ago too); one that creeps takes
+        // its envelope along. The same for the lower envelope and a pool of light that creeps.
+        const FfxInt32x2   iMost = iSize - 1;
+        const FfxFloat32x2 fW = r_env_previous[clamp(iTexel + FfxInt32x2(-ENV_CREEP, 0), FfxInt32x2(0, 0), iMost)];
+        const FfxFloat32x2 fE = r_env_previous[clamp(iTexel + FfxInt32x2(ENV_CREEP, 0), FfxInt32x2(0, 0), iMost)];
+        const FfxFloat32x2 fN = r_env_previous[clamp(iTexel + FfxInt32x2(0, -ENV_CREEP), FfxInt32x2(0, 0), iMost)];
+        const FfxFloat32x2 fS = r_env_previous[clamp(iTexel + FfxInt32x2(0, ENV_CREEP), FfxInt32x2(0, 0), iMost)];
+        fEnv.x = ffxMax(fLog, ffxMin(fEnv.x, ffxMin(ffxMin(fW.x, fE.x), ffxMin(fN.x, fS.x)) + ENV_CREEP_SLACK));
+        fEnv.y = ffxMin(fLog, ffxMax(fEnv.y, ffxMax(ffxMax(fW.y, fE.y), ffxMax(fN.y, fS.y)) - ENV_CREEP_SLACK));
+    }
+    rw_env_current[iTexel] = fEnv;
+
+    // the tint of two by two texels together, by the thread of the first: log red over brightness, log blue over brightness
+    if ((iTexel.x & 1) == 0 && (iTexel.y & 1) == 0)
+    {
+        FfxFloat32x3 fAll = fColour;
+        fAll += envTexel(iTexel + FfxInt32x2(1, 0), iSize);
+        fAll += envTexel(iTexel + FfxInt32x2(0, 1), iSize);
+        fAll += envTexel(iTexel + FfxInt32x2(1, 1), iSize);
+        fAll = clamp(fAll * 0.25f, FfxFloat32x3(0.0f, 0.0f, 0.0f), FfxFloat32x3(ENV_CEILING, ENV_CEILING, ENV_CEILING));
+
+        const FfxInt32x2   iTint  = iTexel / 2;
+        const FfxFloat32   fBase2 = log(ffxMax(envLuma(fAll), 0.0f) + ENV_TINT_FLOOR);
+        const FfxFloat32x2 fTint  = (log(fAll.xz + ENV_TINT_FLOOR) - fBase2) * fPower;
+        FfxFloat32x4 fEnvTint = FfxFloat32x4(fTint.x, fTint.x, fTint.y, fTint.y);
+        if (!bFirst)
+        {
+            const FfxFloat32x4 fBeforeTint = r_env_tint_previous[iTint];
+            fEnvTint.x = envStep(fTint.x, fBeforeTint.x, fStep, fShare, true);
+            fEnvTint.y = envStep(fTint.x, fBeforeTint.y, fStep, fShare, false);
+            fEnvTint.z = envStep(fTint.y, fBeforeTint.z, fStep, fShare, true);
+            fEnvTint.w = envStep(fTint.y, fBeforeTint.w, fStep, fShare, false);
+        }
+        rw_env_tint_current[iTint] = fEnvTint;
+    }
+}
+
+void PrepareLuma(FfxInt32x2 iGlobalId, FfxInt32 iLocalIndex)
+{
+#define PixelsPerThreadX 2
+#define PixelsPerThreadY 2
+    // (the variant v-env) the colours of the thread's pixels together (those that lie in the picture), for its texel of the envelopes
+    FfxFloat32x3 fEnvSum   = FfxFloat32x3(0.0f, 0.0f, 0.0f);
+    FfxFloat32   fEnvCount = 0.0f;
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_prepare_luma.h
+--- old
+            FfxFloat32x3 inputColor = LoadInputColor(iPxHrPos).rgb;
+--- new
+            FfxFloat32x3 inputColor = LoadInputColor(iPxHrPos).rgb;
+            // (the variant v-env)
+            if (pos.x < iInputLumaResolution.x && pos.y < iInputLumaResolution.y)
+            {
+                fEnvSum   += inputColor;
+                fEnvCount += 1.0f;
+            }
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_prepare_luma.h
+--- old
+            StoreOpticalFlowInput(pos, FfxUInt32(fY * 255));
+        }
+    }
+}
+--- new
+            StoreOpticalFlowInput(pos, FfxUInt32(fY * 255));
+        }
+    }
+    // (the variant v-env)
+    envOfThread(iGlobalId, fEnvSum / ffxMax(fEnvCount, 1.0f));
+}
+--- end

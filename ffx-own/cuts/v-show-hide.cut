@@ -1,0 +1,61 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: WHAT THE OCCLUSION PASS DECIDED AT A PIXEL, AS NUMBERS IN THE PICTURE (2026-10-28; the tyre's
+# leftovers, docs\reports\fg-5\desk-2026-10-28-tyre-leftovers). On top of the product (it reads v-hide-reach's own numbers). Every
+# pixel of the generated image comes out as numbers a replay can read back (column.py and leftover.py there):
+#   red     the occlusion mask's frame-before side as the interpolation pass samples it, times 255 (255 visible, 1 v-hide-reach's mark,
+#           0 hidden)
+#   green   a code the occlusion pass wrote in place of the current side (so the current side reads hidden: nothing of the picture
+#           counts here): 1 where v-hide-reach found the thing at the fetch place to stay, 2 where it found a thing that stays just
+#           above the fetch place whose own vector put it there (the bounce), 4 where AMD's test weighed no tap on the frame before's
+#           side, 8 where the pixel moves (v-hide-reach's branch ran), and of the bounce's three tests: 16 the thing above is near
+#           enough, 32 its own vector puts it on the fetch place, 64 it stays; 128 where the current side was visible
+#   blue    0
+# and nothing is inpainted, so that the numbers stand.
+what AN INSTRUMENT (the picture changes): every pixel is painted with the occlusion mask's frame-before side and a code of v-hide-reach's decisions
+passes ffx_frameinterpolation_pass, ffx_frameinterpolation_disocclusion_mask_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from, and the occlusion pass's header; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+static FfxBoolean g_hbvStays = false;                // the thing at the fetch place stays (set once a pixel, before the test)
+--- new
+static FfxFloat32 g_showPrevWeighed = 0.0f;          // (the instrument v-show-hide) the frame before's side: the weight AMD's test weighed
+static FfxFloat32 g_showReach = 0.0f;                // (the instrument v-show-hide) the bounce's three tests, 16 + 32 + 64
+static FfxBoolean g_hbvStays = false;                // the thing at the fetch place stays (set once a pixel, before the test)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    return (fWeightSum > 0.0f) ? ffxSaturate(1.0f - fDepth / fWeightSum) : 0.0f;
+--- new
+    if (estimatedIndex == 0u)
+    {
+        g_showPrevWeighed = fWeightSum;    // (the instrument v-show-hide)
+    }
+    return (fWeightSum > 0.0f) ? ffxSaturate(1.0f - fDepth / fWeightSum) : 0.0f;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+            bStoodThere = !g_hbvStays && IsOnScreen(FfxInt32x2(floor(fFetchPx - FfxFloat32x2(0.0f, REACH))), RenderSize()) && bNear && dot(fWasAt, fWasAt) < REACH_TOL * REACH_TOL && hbvStaying(fThereMv);
+--- new
+            bStoodThere = !g_hbvStays && IsOnScreen(FfxInt32x2(floor(fFetchPx - FfxFloat32x2(0.0f, REACH))), RenderSize()) && bNear && dot(fWasAt, fWasAt) < REACH_TOL * REACH_TOL && hbvStaying(fThereMv);
+            g_showReach = 16.0f * FfxFloat32(bNear) + 32.0f * FfxFloat32(dot(fWasAt, fWasAt) < REACH_TOL * REACH_TOL) + 64.0f * FfxFloat32(hbvStaying(fThereMv));    // (the instrument v-show-hide)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    StoreDisocclusionMask(iPxPos, fDisocclusionMask);
+--- new
+    // (the instrument v-show-hide) the current side carries the code
+    {
+        const FfxFloat32x2 fHerePx = g_hbvWhole * FfxFloat32x2(RenderSize());
+        fDisocclusionMask.y = (FfxFloat32(g_hbvStays) + 2.0f * FfxFloat32(bStoodThere) + 4.0f * FfxFloat32(g_showPrevWeighed <= 0.0f)
+                               + 8.0f * FfxFloat32(dot(fHerePx, fHerePx) > HBV_MIN_PX * HBV_MIN_PX) + g_showReach + 128.0f * fDisocclusionMask.y) / 255.0f;
+    }
+    StoreDisocclusionMask(iPxPos, fDisocclusionMask);
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+--- new
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+        // (the instrument v-show-hide)
+        fInterpolatedColor = FfxFloat32x3(fDisocclusionSampled.x * 255.0f, fDisocclusionSampled.y * 255.0f, 0.0f);
+        fInPaintingWeight  = 0.0f;
+--- end

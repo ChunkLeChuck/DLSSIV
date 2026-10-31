@@ -1,0 +1,13 @@
+# v-env WITH ONE OF ITS THREE MENDS OF 2026-10-12 TAKEN OUT, to judge and to price that mend by itself (ffx-own\cuts\v-env.cut says what
+# the mend is; docs\reports\fg-3\sitting-2026-10-12\lib4\README.md has its numbers). On top of v-env, never without it.
+what A VARIANT (the picture changes): v-env without its mend 1 (the bands apart)
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    // (MEND 1, THE BANDS APART) a gain is also believed where everything the place has been seen to hold lies on one side of
+    // everything the fetch place has: the place's own band may then be as wide as it likes (the car's outline that
+    // stood over it some frames ago is still in one envelope) and the two places still do not hold the same light
+    fBelieved = ffxMax(fBelieved, smoothstep(ENV_APART_0, ENV_APART_1, ffxMax(fPlace.y - fFetch.x, fFetch.y - fPlace.x)));
+--- new
+--- end

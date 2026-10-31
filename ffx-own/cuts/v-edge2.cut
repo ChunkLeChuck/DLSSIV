@@ -1,0 +1,74 @@
+# A VARIANT, NEVER THE PRODUCT: v-edge's ONE MORE TRY (2026-10-25, docs\reports\fg-5\desk-2026-10-25-edge\FIX2.md). ON TOP OF v-edge,
+# IN ITS TEXT. IT CHANGES THE PICTURE where the current frame's sample's place is off the screen (AMD's bNegOutside).
+#
+# WHAT v-edge LEFT (FIX.md, line_rows.py): (1) THE THIN LINE at the band's top row is one to three rows that the disocclusion
+# mask calls disoccluded for the PREVIOUS frame (its reconstructed depth ends there): with the current sample off the
+# screen both factors are 0 and AMD inpaints them whole with the current frame's pixel at the place, a strip of the
+# newer frame's ground between the lone sample below and the blend above. (2) THE RAGGED SHADOW EDGE (run 5): where a
+# place has been seen both lit and dark its envelopes span the lone sample's light, the need is 0, and a sunlit lone
+# sample stays on the shadow.
+# THE CUT, in the same region and nothing outside it:
+#   1. where the current sample's place is off the screen and the previous sample is on it, the mask's previous factor is
+#      not believed (it is 1): the strip is the lone sample as the band is, and takes v-edge's weight;
+#   2. v-edge's weight is set there (bNegOutside: the band and the half row above it whose taps are partly on the screen);
+#   3. its weight is the larger of v-edge's and THE LIGHT ITSELF: the current frame's 2x2 mean at the place against the lone
+#      sample as it is shown, |log| (linear light) from ENV_EDGE_LIGHT_0 to ENV_EDGE_LIGHT_1, times fGrown;
+#   4. FEATHERED: the weight rises from 0 at the band's top to whole ENV_EDGE_FEATHER pixels into it (the first form, with no
+#      feather, put the newer frame's ground against the blend above in one row: a brighter step, FIX2.md).
+what v-edge and, where the current sample's place is off the screen: the previous disocclusion not believed, and the weight also by the light of the current frame's 2x2 at the place against the lone sample
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FFX_STATIC const FfxFloat32 ENV_EDGE_1        = 0.7f;       // whole from this on (log 2)
+--- new
+FFX_STATIC const FfxFloat32 ENV_EDGE_1        = 0.7f;       // whole from this on (log 2)
+FFX_STATIC const FfxFloat32 ENV_EDGE_LIGHT_0  = 0.5f;       // (the variant v-edge2) the place's own light against the lone sample's: nothing under this (log)
+FFX_STATIC const FfxFloat32 ENV_EDGE_LIGHT_1  = 1.0f;       // whole from this on
+FFX_STATIC const FfxFloat32 ENV_EDGE_FEATHER  = 12.0f;      // the weight rises from the band's top over this many display pixels
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FfxFloat32 envEdge(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv)
+--- new
+FfxFloat32 envEdge(FfxUInt32x2 iPxPos, FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, FfxFloat32x3 fLone)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    return smoothstep(ENV_EDGE_0, ENV_EDGE_1, abs(fNeeded)) * fGrown;
+--- new
+    // (the variant v-edge2) THE LIGHT ITSELF: the current frame's 2x2 at the place against the lone sample as it is shown
+    const FfxInt32x2 iBase  = ffxMin(FfxInt32x2(iPxPos) & ~1, FfxInt32x2(DisplaySize()) - 2);
+    const FfxFloat32 fPlace = 0.25f * (RGBToLuma(LoadCurrentBackbuffer(iBase)) + RGBToLuma(LoadCurrentBackbuffer(iBase + FfxInt32x2(1, 0)))
+                                     + RGBToLuma(LoadCurrentBackbuffer(iBase + FfxInt32x2(0, 1))) + RGBToLuma(LoadCurrentBackbuffer(iBase + FfxInt32x2(1, 1))));
+    const FfxFloat32 fPower = BackBufferTransferFunction() == 0 ? 1.0f / ENV_SRGB : 1.0f;
+    const FfxFloat32 fApart = abs(log(ffxMax(fPlace, 1.0e-6f)) - log(ffxMax(RGBToLuma(fLone), 1.0e-6f))) / fPower;
+    return ffxMax(smoothstep(ENV_EDGE_0, ENV_EDGE_1, abs(fNeeded)), smoothstep(ENV_EDGE_LIGHT_0, ENV_EDGE_LIGHT_1, fApart)) * fGrown;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+            fInterpolatedColor = fPrevColorGame.fRaw;
+            // (the variant v-edge) the current frame's sample is off the screen: its own pixel at the place stands in, by
+            // how much light the lone sample does not hold (the inpainting pass takes it by this weight)
+            updateInPaintingWeight(fInPaintingWeight, envEdge(fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale));
+--- new
+            fInterpolatedColor = fPrevColorGame.fRaw;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fDisocclusionFactor.y *= FfxFloat32(!gameMv.bNegOutside); // fDisocclusionFactor.y of 1 means the pos of interpolated pixel is within bounds of current frame
+--- new
+        fDisocclusionFactor.y *= FfxFloat32(!gameMv.bNegOutside); // fDisocclusionFactor.y of 1 means the pos of interpolated pixel is within bounds of current frame
+        // (the variant v-edge2) THE CURRENT SAMPLE'S PLACE OFF THE SCREEN, THE PREVIOUS ONE ON IT: the mask's previous factor is not
+        // believed (its reconstructed depth ends at the band: a strip AMD would inpaint whole), and the current frame's own
+        // pixel at the place stands in by v-edge's weight (the inpainting pass takes it by this weight)
+        if (gameMv.bNegOutside && !gameMv.bPosOutside && fPrevColorGame.fBilinearWeightSum > 0.0f)
+        {
+            fDisocclusionFactor.x = 1.0f;
+            // FEATHERED from the band's top: whole where the current sample's place lies ENV_EDGE_FEATHER pixels or more off the screen
+            const FfxFloat32x2 fOffUv = fUvInScreenSpace - gameMv.fMotionVector * fUvLetterBoxScale;
+            const FfxFloat32x2 fOff   = ffxMax(-fOffUv, fOffUv - 1.0f) * FfxFloat32x2(DisplaySize());
+            updateInPaintingWeight(fInPaintingWeight, envEdge(iPxPos, fUvInScreenSpace, gameMv.fMotionVector * fUvLetterBoxScale, fPrevColorGame.fRaw)
+                                                      * ffxSaturate(ffxMax(fOff.x, fOff.y) / ENV_EDGE_FEATHER));
+        }
+--- end

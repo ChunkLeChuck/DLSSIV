@@ -1,0 +1,85 @@
+# A VARIANT, NEVER THE PRODUCT (2026-10-12, the leftovers of the picture: docs\reports\fg-3\sitting-2026-10-12b, the main session's
+# addition to BRIEF-ship.md, part 6 (c) and (a)). IT CHANGES THE PICTURE. Built only into the variant library "next", on
+# top of the product's cuts (tools\ffx-own\build_variants.py next).
+#
+# WHAT AMD'S CODE DOES. The game motion vector field's pass throws every pixel of the CURRENT frame half its vector back,
+# to the place it had when the generated frame is shown, and where two pixels land on one cell THE ONE NEARER THE CAMERA
+# WINS, by its depth IN THE CURRENT FRAME. The same depth is splatted there as the generated frame's estimated depth.
+# That is right for a thing that keeps its distance. It is wrong for THE GROUND UNDER A MOVING CAMERA: a piece of road
+# that has just come out from under a tyre, or from under the bumper's edge, is nearer now than it was half a frame
+# ago, when it lay BEHIND the still thing; by its depth of now it beats the tyre's foot and the bumper's edge in their
+# own cells. The interpolation then blends two pieces of road into the outline of a thing that stood still in both
+# real frames: the small dark steps at a still tyre's outline over fast ground (desk-2026-10-11-ghost\env\README.md,
+# section 6 c), and the line of ground along the bumper's edge.
+#
+# THE VARIANT. The depth a pixel throws is THE DEPTH ITS SURFACE HAS AT THE PLACE IT IS PUT. Device depth is a straight line
+# across the screen for any flat surface (it is affine in one over the distance), so along the pixel's own path
+#     d(the place half a vector back) = 2 d(here) - d(half a vector on)
+# and the place half a vector on is a pixel of the same frame: ONE MORE LOAD of the dilated depth a moving pixel. It is
+# taken only where the two depths can be one surface (the pixel ahead is nearer, and by less than a fifth of the
+# distance) and only as far as it puts the pixel FARTHER: a thing that keeps its distance (a post, another car, a
+# walker) reads the same depth ahead and nothing changes for it; where the pixel ahead is something else and far
+# nearer, nothing changes; where it is farther (the surface recedes), nothing changes, which is AMD's rule as before.
+# Nothing under a half vector of THEN_MOVED pixels of the guides.
+# THE PRIORITY of the primary vector takes that depth, and the secondary vectors' reversed priority, which is made of the
+# primary's. THE DEPTH SPLAT DOES NOT: it stays AMD's, the pixel's depth in the current frame. THE FIRST FORM OF THIS CUT
+# splatted the new depth too, and that was wrong in a way the bench's first yardstick could not see: on fast ground
+# 310,000 to 650,000 pixels of a generated frame came out as the newer real frame's own pixel (the product: 51,000 to
+# 80,000; cap5\run-03 and capw\run-03, tools\test-fg-own\next.py, "pixels that repeat the newer real frame"). The
+# disocclusion mask holds the two real frames' depths against that splat, and its test is built for the depth of the
+# current frame.
+#
+# THE VERDICT (2026-10-12, tools\test-fg-own\next.py on twelve captured runs, three replays; result-next.txt in the round's folder):
+# NOT A MEND. With the ordering alone the picture hardly moves: 0.2 to 1.3 percent of a frame's pixels by a code, at
+# most 0.02 percent by 16; at the still tyre's bottom (capw\run-03, 330 by 105 pixels) 442 wrong pixels become 434, and
+# a still thing's wrong pixels over the car's zone 6,312 become 6,302 a frame, the mean of the runs. THE STEPS AT THE TYRE
+# ARE NOT MADE BY THE ORDER IN WHICH THE FIELD'S CELLS ARE WON, or not by that alone. Kept as a variant so that nobody builds
+# it a third time; left out of everything.
+#
+# NO NEW KIND OF CALL: a load of a texture the pass loads already, by its texel.
+what A VARIANT (the picture changes): the game motion vector field's pass orders the pixels that land on a cell by the depth each has AT THE PLACE IT IS PUT (its surface's own straight line of device depth along its path), not by its depth in the current frame
+passes ffx_frameinterpolation_game_motion_vector_field_pass
+wave64 the same edit in both variants: no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+void computeGameFieldMvs(FfxInt32x2 iPxPos)
+{
+--- new
+// (the variant v-field-depth-then) THE DEPTH A PIXEL'S SURFACE HAS AT THE PLACE IT IS PUT IN THE GENERATED FRAME, in device depth: the
+// file's head in ffx-own\cuts says why. fHalf: half the pixel's vector, in UV.
+FFX_STATIC const FfxFloat32 THEN_MOVED = 1.0f;      // nothing under a half vector of this many pixels of the guides
+FFX_STATIC const FfxFloat32 THEN_SAME  = 0.8f;      // the pixel ahead is the same surface where its distance is at least this times the pixel's
+
+FfxFloat32 fieldDepthThen(FfxInt32x2 iPxPos, FfxFloat32 fDepth, FfxFloat32x2 fHalf)
+{
+    const FfxFloat32x2 fStep = fHalf * FfxFloat32x2(RenderSize());
+    if (dot(fStep, fStep) < THEN_MOVED * THEN_MOVED)
+    {
+        return fDepth;
+    }
+    const FfxInt32x2 iAhead = iPxPos - FfxInt32x2(round(fStep));
+    if (!IsOnScreen(iAhead, RenderSize()))
+    {
+        return fDepth;
+    }
+    const FfxFloat32 fAhead = LoadDilatedDepth(iAhead);
+    const FfxFloat32 fZ      = ConvertFromDeviceDepthToViewSpace(fDepth);
+    const FfxFloat32 fZAhead = ConvertFromDeviceDepthToViewSpace(fAhead);
+    if (fZAhead < fZ && fZAhead >= THEN_SAME * fZ)
+    {
+        return ffxSaturate(2.0f * fDepth - fAhead);
+    }
+    return fDepth;
+}
+
+void computeGameFieldMvs(FfxInt32x2 iPxPos)
+{
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+    const FfxFloat32 fViewSpaceDepth = ConvertFromDeviceDepthToViewSpace(fDepthSample);
+--- new
+    // (the variant v-field-depth-then) the pixel is ordered by the depth it has at the place it is put (the depth splat below keeps fDepthSample)
+    const FfxFloat32 fDepthThen = fieldDepthThen(iPxPos, fDepthSample, fMotionVectorHalf);
+    const FfxFloat32 fViewSpaceDepth = ConvertFromDeviceDepthToViewSpace(fDepthThen);
+--- end

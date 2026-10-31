@@ -1,0 +1,22 @@
+# A VARIANT, NEVER THE PRODUCT: THE MOTION SEARCH AT HALF SIZE (2026-10-11; stage 3's report, "For stage 5", item 1).
+# IT CHANGES THE PICTURE. Built only into a variant library (build-ffx-own.ps1 -Variant; tools\ffx-own\build_variants.py).
+#
+# Optical flow searches seven levels, coarse to fine; each level's scale pass hands the next finer level a vector for
+# every block, and that level's search refines it in place. The finest search (level 0: 480 by 270 blocks of 8 by 8
+# pixels at 3840x2160, O4) is the dearest pass of optical flow. HERE IT IS NOT RUN: level 0 keeps what level 1's scale
+# pass gave it (a vector in steps of two pixels, chosen there among its neighbours' candidates) and is filtered as
+# before. What goes with the search: its refinement to one pixel, and AMD's fallback to "no motion" where a block does
+# not match better than it does unmoved.
+what A VARIANT (the picture changes): optical flow's finest search (O4, level 0) is not run; level 0 keeps the vectors level 1's scale pass gave it
+passes none
+wave64 no shader changes: one dispatch is not scheduled
+file framegeneration/fsr3/internal/ffx_opticalflow.cpp
+--- old
+                        scheduleDispatch(context, &context->pipelineComputeOpticalFlowAdvancedV5, pipelineName.c_str(), dispatchX, dispatchY);
+--- new
+                        // (the variant v-search-half: the finest level is not searched)
+                        if (level > 0)
+                        {
+                            scheduleDispatch(context, &context->pipelineComputeOpticalFlowAdvancedV5, pipelineName.c_str(), dispatchX, dispatchY);
+                        }
+--- end

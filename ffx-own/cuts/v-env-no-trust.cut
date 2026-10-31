@@ -1,0 +1,14 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: v-env WITHOUT ITS TRUST (2026-10-27; round 9's tyre desk, docs\reports\fg-5\desk-2026-10-27-tyres).
+# On top of the product: every sample is still relit for the place it is put, but where both samples are used the blend is
+# the frame's own t again (the line "t = ffxLerp(t, fEnvT, fEnvShare)" taken out). A replay through it against the product
+# says how much of the tyre's copy on the road the trust makes: where the road's sample needs a large relighting (fetched from
+# sun into shade) and the tyre's sample, fetched from the tyre in the car's shade, needs none, the trust takes the tyre.
+what AN INSTRUMENT (the picture changes): v-env's samples relit as in the product, but the two samples blended at the frame's own t (no trust)
+passes ffx_frameinterpolation_pass
+wave64 it edits ffx_frameinterpolation.h, which both the cs_6_2 and the cs_6_6 (wave64) variants of the interpolation pass are compiled from; no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+            t = ffxLerp(t, fEnvT, fEnvShare);
+--- new
+            // (the instrument v-env-no-trust) the trust is not used: the frame's own t
+--- end

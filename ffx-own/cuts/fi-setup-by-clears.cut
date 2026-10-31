@@ -1,0 +1,51 @@
+# THE SETUP PASS'S ZEROES ARE WRITTEN BY CLEARS, AND THE PASS RUNS ONE GROUP (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The first pass of every dispatch runs one thread for every pixel of the guides (3.7 million at
+# Quality's guides, 8.3 million at DLAA's) to write zeroes: into the game vector field's two images, optical flow's
+# vector field's two images and the disocclusion mask. The same pass keeps two counters, from the thread of pixel
+# (0, 0) (and stores one of them from every thread: the same zero into the same cell).
+# A clear of an image the same size costs 1 to 3 us in the table by pass (the clears of the two depth images); the
+# setup pass costs 37 and 79.
+#
+# THE CUT. Five clear jobs of AMD's own kind write the zeroes (the backend's clear copies the bits of 0.0f, which are
+# the zero of each of the five formats: ffx_dx12.cpp, executeGpuJobClearFloat; the clears of the two depth images go
+# the same way). The setup pass is then dispatched as ONE group of 8 by 8 threads instead of one group for every 8 by
+# 8 pixels: its thread of pixel (0, 0) keeps the counters as before, and its 64 threads write 64 zeroes where the
+# clears have written them already. The shader is not edited.
+#   WHAT DIFFERS, AND WHY NOTHING READS IT. AMD's pass zeroes the pixels of this dispatch's guides, rounded up to
+#   eight; a clear zeroes the whole image, which is as large as the largest guides the context was created for. The
+#   pixels beyond this dispatch's guides are read by no pass: every load of the three kinds of image is made at a
+#   position inside the guides' size (the game field: ffx_frameinterpolation_common.h, LoadInpaintedGameFieldMv, and
+#   the pyramid's rectangle; optical flow's field: inside optical flow's size; the mask: written whole by the
+#   disocclusion mask pass before the one pass that samples it).
+#
+# IT TAKES THE PLACE OF the cut fi-setup-zero-what-is-read (the same pass with fewer stores a thread), which is left out.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what the setup pass's (I1) zeroes are written by five clears of AMD's own kind, and the pass runs one group of threads (for its counters) instead of one for every 8 by 8 pixels of the guides
+passes none
+wave64 it edits ffx_frameinterpolation.cpp, which runs on every device, and no shader: every variant's containers are AMD's
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+        scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiSetup, renderDispatchSizeX, renderDispatchSizeY);
+--- new
+        // (the mod's cut fi-setup-by-clears) the five images the setup pass zeroes, zeroed by clears; the pass itself
+        // for its counters alone, in one group of threads
+        {
+            const FfxUInt32 zeroedBySetup[] = {
+                FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_GAME_MOTION_VECTOR_FIELD_X,
+                FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_GAME_MOTION_VECTOR_FIELD_Y,
+                FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_MOTION_VECTOR_FIELD_X,
+                FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_OPTICAL_FLOW_MOTION_VECTOR_FIELD_Y,
+                FFX_FRAMEINTERPOLATION_RESOURCE_IDENTIFIER_DISOCCLUSION_MASK
+            };
+            FfxGpuJobDescription clearJob = {FFX_GPU_JOB_CLEAR_FLOAT};      // (its four values are 0.f)
+            wcscpy_s(clearJob.jobLabel, L"Clear Setup Images");
+            for (int i = 0; i < _countof(zeroedBySetup); ++i)
+            {
+                clearJob.clearJobDescriptor.target = contextPrivate->uavResources[zeroedBySetup[i]];
+                contextPrivate->contextDescription.backendInterface.fpScheduleGpuJob(&contextPrivate->contextDescription.backendInterface, &clearJob);
+            }
+        }
+        scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiSetup, 1, 1);
+--- end

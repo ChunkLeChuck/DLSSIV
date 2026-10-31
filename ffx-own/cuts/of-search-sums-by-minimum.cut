@@ -1,0 +1,100 @@
+# THE SEARCH'S SUMS OF ABSOLUTE DIFFERENCES, BY THE MINIMUM (2026-10-10, the own build's stage 3). ON TOP OF THE CUT
+# of-search-by-rows, whose text it edits: it is applied after it and cannot be in without it.
+#
+# The search is bound by its arithmetic: 128 absolute differences a thread and row, each a subtraction, an absolute
+# value and an addition. For whole numbers that are not negative,
+#       |a - b|  =  a + b - 2 min(a, b)
+# and so a sum of absolute differences over a block is (the sum of the block's pixels) + (the sum of the window's
+# pixels under it) - 2 (the sum of the minima). The block's sum is one number a thread; the window's sums for the 16
+# columns of a search row are 16 sliding sums of 23 column totals; and what is left for each of the 128 pairs is a
+# minimum and an addition. The sums are the same whole numbers (nothing overflows: a sum is at most 64 times 255),
+# they are packed and compared as before.
+#
+# TRIED BESIDE IT, each the same images and each SLOWER than of-search-by-rows as it stands (274 us at level 0):
+#   the difference as max(a, b) - min(a, b)                    397 us
+#   the loop over the block's 8 rows unrolled                  324 us
+#   (and with one row of the eight computed, a probe that is not the search: 95 us; the loading of the windows and the
+#   reductions are about 70 us of the 274, the arithmetic about 200)
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what optical flow's search (O4 to O6), on top of of-search-by-rows: a sum of absolute differences as the block's sum plus the window's sum less twice the sum of the minima: a minimum and an addition a pair instead of a subtraction, an absolute value and an addition
+passes ffx_opticalflow_compute_optical_flow_advanced_pass_v5
+wave64 it edits the path of of-search-by-rows, which the cs_6_6 variant WITH [WaveSize(64)] does not compile (its msad4 path is AMD's, line for line; its containers change by their source hash alone)
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+    for (FfxInt32 dy = 0; dy < CompareSize; dy++)
+    {
+        const FfxInt32 rowOffset = (iRow + dy) * SearchBufferSizeX;
+        FfxInt32 s[SearchBufferSizeX * 4];
+--- new
+    FfxInt32 mins[SearchRadiusX * 2];
+    FfxInt32 columns[SearchBufferSizeX * 4];
+    FfxInt32 pixelSum = 0;
+    FFX_UNROLL
+    for (FfxInt32 x2 = 0; x2 < SearchRadiusX * 2; x2++)
+    {
+        mins[x2] = 0;
+    }
+    FFX_UNROLL
+    for (FfxInt32 n2 = 0; n2 < SearchBufferSizeX * 4; n2++)
+    {
+        columns[n2] = 0;
+    }
+    for (FfxInt32 dy = 0; dy < CompareSize; dy++)
+    {
+        const FfxInt32 rowOffset = (iRow + dy) * SearchBufferSizeX;
+        FfxInt32 s[SearchBufferSizeX * 4];
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+        FFX_UNROLL
+        for (FfxInt32 x = 0; x < SearchRadiusX * 2; x++)
+        {
+            FfxUInt32 rowSad = 0u;
+            FFX_UNROLL
+            for (FfxInt32 j = 0; j < CompareSize; j++)
+            {
+                rowSad += FfxUInt32(abs(s[x + j] - p[j]));
+            }
+            sads[x] += rowSad;
+        }
+    }
+--- new
+        FFX_UNROLL
+        for (FfxInt32 j2 = 0; j2 < CompareSize; j2++)
+        {
+            pixelSum += p[j2];
+        }
+        FFX_UNROLL
+        for (FfxInt32 n3 = 0; n3 < SearchRadiusX * 2 + CompareSize - 1; n3++)
+        {
+            columns[n3] += s[n3];
+        }
+        FFX_UNROLL
+        for (FfxInt32 x = 0; x < SearchRadiusX * 2; x++)
+        {
+            FfxInt32 rowMin = 0;
+            FFX_UNROLL
+            for (FfxInt32 j = 0; j < CompareSize; j++)
+            {
+                rowMin += min(s[x + j], p[j]);
+            }
+            mins[x] += rowMin;
+        }
+    }
+    FfxInt32 windowSum = 0;
+    FFX_UNROLL
+    for (FfxInt32 j3 = 0; j3 < CompareSize; j3++)
+    {
+        windowSum += columns[j3];
+    }
+    FFX_UNROLL
+    for (FfxInt32 x3 = 0; x3 < SearchRadiusX * 2; x3++)
+    {
+        sads[x3] = FfxUInt32(windowSum + pixelSum - 2 * mins[x3]);
+        if (x3 + 1 < SearchRadiusX * 2)
+        {
+            windowSum += columns[x3 + CompareSize] - columns[x3];
+        }
+    }
+--- end

@@ -1,0 +1,19 @@
+# ONE SET OF THE THREE SHARED GUIDE IMAGES, NOT TWO (2026-10-25, frame generation round 8, E2; docs\reports\fg-5\opt-2026-10-25\
+# MEMORY-AND-PRESENTER.md, "What could be cut", item 2). AN EXACT CUT BY CONSTRUCTION, of the product's memory: it stands with the
+# accepted cuts beside fi-guide-images-at-cap so that the two make one record of the product (the exact library keeps its record).
+#
+# WHAT AMD'S PROVIDER DOES. It makes the prepare's three images (the dilated depth, the dilated vectors, the previous frame's nearest
+# depth) TWICE (FFX_FSR3_RESOURCE_IDENTIFIER_..._0 and _1) and switches the set at every prepare, so that an upscaler on another
+# queue can write frame N+1's while frame generation reads frame N's.
+# HERE. The prepare and the interpolate are on the helper's one queue (h.queue) in submission order, and the interpolate reads the
+# set of the NEWEST prepare (c->set, which every prepare moved) and no other: a dispatch recorded after the next prepare read that
+# prepare's set before this cut as after it. The other set was never read. So the glue (define DLSSIV_FG_CUT_ONE_SHARED_SET) makes
+# one set and the set stays 0. Saves 23.7 / 42.2 / 94.9 MiB at DLAA at 1080p / 1440p / 4K, 10.5 / 18.8 / 42.2 at Quality or after
+# fi-guide-images-at-cap.
+# THE PROOFS: the judge pair by pair (the product's pictures the pinned ones, and the library without the cut making them too), and
+# the ordering with the worker held: tools\test-fg-pipe's W1 (--fake-fg=7) on the shipped helper and E1 (--fake-fg=11: the helper
+# held ahead of a prepare with a 'Q' queued right behind) on the development helper, both on this library.
+what one set of the prepare's three shared images, not two: the interpolate reads the newest prepare's set alone, on the helper's one queue in submission order, so the second set was never read
+passes none
+wave64 a change of the glue alone: no shader is compiled otherwise
+define DLSSIV_FG_CUT_ONE_SHARED_SET

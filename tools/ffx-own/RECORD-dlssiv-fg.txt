@@ -1,0 +1,16 @@
+# THE RECORD OF THE SECOND LIBRARY OF THE OWN BUILD: dlssiv-fg.dll, AMD's frame interpolation, optical flow and backend
+# behind the mod's own interface (build-ffx-own.ps1 -Target dlssiv-fg; the own build's stage 2). The same keys as
+# RECORD.txt beside it, which names the reference library the same objects link to. tools\prove-ffx-own.py fails when
+# what it builds or finds is not this. NEVER EDITED BY HAND: python tools\prove-ffx-own.py --new-record-fg writes it
+# and prints what it replaced.
+library dlssiv-fg.dll
+size 751104
+sha256 6efe54894bf6ae0d05beaad662f44a73e806893b8049b584ef76948a785f257c
+cl 19.44.35228
+link 14.44.35228.0
+windows-sdk 10.0.26100.0
+dxc 1.8.2502.11
+headers 72
+headers-sha256 d029c64fa53eb30f5f2c33c5c3b20d3b0e5ee22bcde8155031963c89bf2e70bc
+manifest-rows 98
+manifest-sha256 7d00456d94e33433cddf6506ee4b49b7881d1341476599243ce43c34ba4b43f6

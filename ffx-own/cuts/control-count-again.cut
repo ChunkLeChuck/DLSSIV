@@ -1,0 +1,15 @@
+# A CONTROL, NEVER A CUT OF THE PRODUCT (2026-10-18, frame generation phase 5, the true fill's package G1: the store apart).
+# The cut fi-store-apart keeps AMD's count of dispatches since a reset a count of PAIRS: a later dispatch of an open pair
+# (AGAIN) does not run the setup pass that counts. The interpolation reads that count (0: the current picture is copied;
+# under 10: optical flow's colour is left out), and so does the product's v-env. That the two frames of a pair equal
+# single interpolates proves the rule only if a pair counted twice WOULD show: this is the library that counts it twice.
+# Our glue never tells AMD's dispatch AGAIN; the store is fi-store-apart's (NO_STORE kept). Built on the exact library's
+# cuts (build-ffx-own.ps1 -Target dlssiv-fg -Cuts exact,+control-count-again -OutDir obj\dlssiv-fg-count);
+# tools\test-fg-own\thirds.py must find its images the same as single interpolates on every pair before the 5th after a reset
+# (counted twice, the count stays on the same side of 0 and of 10 there) and DIFFERENT on at least one of pairs 5 to 9,
+# whose count crosses AMD's bound of 10 when it is counted twice (where optical flow's colour and the game's agree, as on
+# a picture that only slides, the bound changes nothing and the control says so).
+what THE CONTROL OF fi-store-apart's AGAIN: the glue counts every dispatch of a pair, as AMD's dispatch does
+passes none
+wave64 it changes our glue alone; it is a control and is never in the product
+define DLSSIV_FG_CUT_COUNT_AGAIN_CONTROL

@@ -1,0 +1,13 @@
+# A CONTROL, NEVER A CUT OF THE PRODUCT (2026-10-18, frame generation phase 5, the true fill's package G1: the store apart).
+# The cut fi-store-apart lets the first of two generated frames of one pair NOT keep the pair's picture, so that the second
+# interpolates from the previous pair's picture as a single interpolate at its place does. That the second then equals a
+# single interpolate proves the cut only if a store at the first WOULD show in the second: this is the library that
+# stores anyway. Our glue, where the caller says NO_STORE, leaves AMD's dispatch the store (and keeps the pair open, so
+# that the second dispatch still does not count the pair again: the store is the only difference). Everything else is
+# the exact library's. Built on the exact library's cuts (build-ffx-own.ps1 -Target dlssiv-fg -Cuts
+# exact,+control-store-first -OutDir obj\dlssiv-fg-store); tools\test-fg-own\thirds.py must find its second image
+# DIFFERENT from a single interpolate at 2/3 on every frame that moves, and its first image the same.
+what THE CONTROL OF fi-store-apart's NO_STORE: the glue lets the first of two generated frames of one pair keep the pair's picture, as AMD's dispatch does
+passes none
+wave64 it changes our glue alone; it is a control and is never in the product
+define DLSSIV_FG_CUT_STORE_FIRST_CONTROL

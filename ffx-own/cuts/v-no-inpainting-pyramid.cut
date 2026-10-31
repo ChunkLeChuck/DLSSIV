@@ -1,0 +1,24 @@
+# A VARIANT, NEVER THE PRODUCT: NO INPAINTING PYRAMID (2026-10-11; stage 3's report, "For stage 5", item 4).
+# IT CHANGES THE PICTURE. Built only into a variant library (build-ffx-own.ps1 -Variant).
+#
+# Where the interpolation has nothing to show (a place uncovered in both frames, or one that came in from outside the
+# screen: a strip at the screen's edge while the camera turns), AMD fills it from a pyramid of ever smaller copies of
+# the generated frame (I9: a pass over all of the frame, 53 us), blended by the pixel's inpainting weight. HERE THE
+# PYRAMID IS NOT BUILT, and such a pixel takes the newer real frame's own pixel at that place, by the same weight.
+what A VARIANT (the picture changes): the inpainting pyramid (I9) is not built; a pixel that asks for inpainting takes the newer real frame's pixel at its place, by the same weight
+passes ffx_frameinterpolation_inpainting_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+            scheduleDispatch(contextPrivate, &contextPrivate->pipelineInpaintingPyramid, dispatchThreadGroupCountXY[0], dispatchThreadGroupCountXY[1]);
+--- new
+            // (the variant v-no-inpainting-pyramid: the pyramid is not built; the inpainting pass does not read it)
+            (void)dispatchThreadGroupCountXY;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_inpainting.h
+--- old
+        fInterpolatedColor.rgb = ffxLerp(fInterpolatedColor.rgb, ComputeInpainting(iPxPos) * FfxFloat32(DisplaySize().x > 0), fInPaintingWeight);
+--- new
+        // (the variant v-no-inpainting-pyramid: the newer real frame's pixel instead of the pyramid's colour)
+        fInterpolatedColor.rgb = ffxLerp(fInterpolatedColor.rgb, LoadCurrentBackbuffer(iPxPos).rgb, fInPaintingWeight);
+--- end

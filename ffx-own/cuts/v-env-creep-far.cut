@@ -1,0 +1,29 @@
+# A VARIANT, NEVER THE PRODUCT (2026-10-12, the leftovers of the picture: docs\reports\fg-3\sitting-2026-10-12b, the main session's
+# addition to BRIEF-ship.md, part 6 (b)). IT CHANGES THE PICTURE. On top of the product's cuts (v-env is one of them),
+# in the variant library "next-creep" (tools\ffx-own\build_variants.py).
+#
+# WHAT IS LEFT. v-env's mend 3 lets an envelope creep with a light that stays with a thing that shifts on the screen: it
+# may not stay more than ENV_CREEP_SLACK above the lowest one ENV_CREEP texels away, and ENV_CREEP is 2 texels, 4
+# pixels of the picture, a frame. A car that drifts faster on the screen (a swerve, a camera that swings: cap3\run-03
+# has 4.9 pixels a frame) outruns it, and its shadow's leading edge is late again by what it outruns.
+#
+# THE VARIANT: the same four loads one texel farther out, 3 texels, 6 pixels a frame. Nothing else changes and nothing is
+# added. What it may harm is what the reach was kept short for: a shadow of the WORLD that passes slowly on the screen
+# (a far one) is carried along as if it stayed. tools\test-fg-own\next.py reads both.
+#
+# THE VERDICT (2026-10-12, twelve captured runs, three replays; result-next-creep.txt in the round's folder): NOT WORTH IT. On the
+# run it was made for (cap3\run-03, 4.9 pixels a frame) the pixels in the wrong light in the car's zone go from 46,929
+# to 46,792 a frame, three in a thousand. Elsewhere it gives and takes: cap5\run-02 8,392 to 7,912, cap5\run-01 4,480
+# to 4,312, but prof5\run-04 6,347 to 6,430 and cap5\run-03 4,312 to 4,382; and of the pixels it moves by 16 codes it
+# breaks nearly as many as it mends (cap5\run-03: 589 mended, 568 broken; cap3\run-03: 6,715 and 5,762). A shadow that
+# outruns the creep wants its envelope MOVED BY THE THING'S OWN VECTOR, which the pass that writes the envelopes does not
+# have. Kept as a variant with its numbers; left out of everything.
+what A VARIANT (the picture changes): v-env's envelopes creep 3 texels a frame (6 pixels of the picture) where the product's creep 2
+passes ffx_opticalflow_prepare_luma_pass
+wave64 the same edit in both variants: no wave operation
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_prepare_luma.h
+--- old
+FFX_STATIC const FfxInt32   ENV_CREEP       = 2;        // (mend 3) how many texels away an envelope looks at its neighbours
+--- new
+FFX_STATIC const FfxInt32   ENV_CREEP       = 3;        // (mend 3; the variant v-env-creep-far: 3 where the product has 2) how many texels away an envelope looks at its neighbours
+--- end

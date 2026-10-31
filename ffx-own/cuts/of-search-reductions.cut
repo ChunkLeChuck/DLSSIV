@@ -1,0 +1,97 @@
+# THE SEARCH'S TWO REDUCTIONS OVER A GROUP, WITH TWO GROUP BARRIERS A BLOCK INSTEAD OF FOUR (2026-10-10, the own build's
+# stage 3).
+#
+# WHAT AMD'S CODE DOES, for each of a group's four blocks, once every thread has its four sums of absolute differences:
+#   1. PrepareSadMap: each thread packs its four sums with their search offsets and STORES the four words into the
+#      group's shared memory; a group barrier.
+#   2. SadMapMinReduction256: each thread LOADS four words from that memory, takes their minimum, then the minimum over
+#      its wave, and, where a wave is 32 lanes wide, hands it to the other wave through shared memory behind a second
+#      group barrier.
+#   3. BlockSad64: the sum of the block's own differences over the wave, handed to the other wave the same way behind a
+#      third group barrier. (The fourth barrier of a block is the one behind the loading of the search window.)
+# The four words a thread loads in step 2 are its own: the indices are its own search position, which no other thread
+# of the group has (64 threads, 4 by 16 positions: MapThreads). The store, the barrier and the load hand a thread what
+# it already holds.
+#
+# THE CUT. A thread takes the minimum of its own four packed words directly (the same four words, by the same
+# expressions). Then both reductions over the wave, and ONE exchange between the two waves for both values behind ONE
+# group barrier. The values are the same whole numbers: a minimum and a sum do not depend on when they are taken.
+# The window's barrier still stands between one block's exchange and the next block's.
+#
+# MEASURED 2026-10-10 (3840x2160 FP16, three rounds, spread 1 us or less; the same images on every hashed pair): the
+# search of level 0 370 -> 369 us, of level 1 100 -> 100, of levels 2 to 6 71 -> 70; the optical flow call 3 us less.
+# LEFT OUT: under 5 us. The search is bound by its arithmetic, not by its barriers (the cut of-search-by-rows is the
+# one that went at the arithmetic).
+what optical flow's search (O4 to O6) takes a thread's own minimum without the shared-memory round trip, and exchanges both reductions between the two waves behind one barrier: two group barriers a block, not four
+passes ffx_opticalflow_compute_optical_flow_advanced_pass_v5
+wave64 it edits the search's file, from which the cs_6_2 variant and the cs_6_6 one WITH [WaveSize(64)] are both compiled; on a 64-lane device the exchange is not taken at all (as in AMD's code) and the cut removes the round trip and its barrier there too; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+void ComputeOpticalFlowAdvanced(FfxInt32x2 iGlobalId, FfxInt32x2 iLocalId, FfxInt32x2 iGroupId, FfxInt32 iLocalIndex)
+{
+--- new
+// (the mod's cut of-search-reductions) BOTH REDUCTIONS OF A BLOCK OVER THE GROUP: the smallest of the group's 256 packed
+// sums (AMD's PrepareSadMap and SadMapMinReduction256, without the round trip through shared memory: a thread read back
+// its own four words) and the block's own sum (AMD's BlockSad64), with one exchange between the two waves for both.
+#if FFX_LOCAL_SEARCH_FALLBACK != 1
+#error the mod's cut of-search-reductions is written for FFX_LOCAL_SEARCH_FALLBACK == 1, as AMD's callbacks define it
+#endif
+void SearchReductions(FfxInt32x2 iSearchId, FfxInt32 iLocalIndex, FfxUInt32x4 qsad, FfxUInt32 blockSadSum, FfxInt32 iLaneToBlockId, FfxInt32 block,
+                      out FfxUInt32 minSad, out FfxUInt32 blockSad)
+{
+    FfxUInt32 min01 = ffxMin((qsad.x << 16) | EncodeSearchCoord(FfxInt32x2(iSearchId.x * 4 + 0, iSearchId.y)),
+                             (qsad.y << 16) | EncodeSearchCoord(FfxInt32x2(iSearchId.x * 4 + 1, iSearchId.y)));
+    FfxUInt32 min23 = ffxMin((qsad.z << 16) | EncodeSearchCoord(FfxInt32x2(iSearchId.x * 4 + 2, iSearchId.y)),
+                             (qsad.w << 16) | EncodeSearchCoord(FfxInt32x2(iSearchId.x * 4 + 3, iSearchId.y)));
+    FfxUInt32 min0123 = ffxMin(min01, min23);
+    min0123 = ffxWaveMin(min0123);
+
+    if (iLaneToBlockId != block)
+    {
+        blockSadSum = 0u;
+    }
+    blockSadSum = ffxWaveSum(blockSadSum);
+
+    if (ffxWaveLaneCount() == 32)
+    {
+        FfxInt32 waveId = iLocalIndex >> 5u;
+
+        if (ffxWaveIsFirstLane())
+        {
+            sWaveMin[waveId] = min0123;
+            sWaveSad[waveId] = blockSadSum;
+        }
+        FFX_GROUP_MEMORY_BARRIER;
+        min0123 = ffxMin(min0123, sWaveMin[waveId ^ 1]);
+        blockSadSum += sWaveSad[waveId ^ 1];
+    }
+
+    minSad = min0123;
+    blockSad = blockSadSum;
+}
+
+void ComputeOpticalFlowAdvanced(FfxInt32x2 iGlobalId, FfxInt32x2 iLocalId, FfxInt32x2 iGroupId, FfxInt32 iLocalIndex)
+{
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+            PrepareSadMap(iSearchId, qsad);
+            FfxUInt32 minSad = SadMapMinReduction256(iSearchId, iLocalIndex);
+
+            FfxInt32x2 minSadCoord = DecodeSearchCoord(minSad);
+            FfxInt32x2 newVector = currentVector + minSadCoord;
+
+#if FFX_LOCAL_SEARCH_FALLBACK == 1
+            FfxUInt32 blockSadSum = BlockSad64(sad_4blocks, iLocalIndex, iLaneToBlockId, blockId.x + blockId.y * 2);
+            if (OpticalFlowPyramidLevel() == 0 && blockSadSum <= (minSad >> 16u))
+--- new
+            FfxUInt32 minSad;
+            FfxUInt32 blockSadSum;
+            SearchReductions(iSearchId, iLocalIndex, qsad, sad_4blocks, iLaneToBlockId, blockId.x + blockId.y * 2, minSad, blockSadSum);
+
+            FfxInt32x2 minSadCoord = DecodeSearchCoord(minSad);
+            FfxInt32x2 newVector = currentVector + minSadCoord;
+
+#if FFX_LOCAL_SEARCH_FALLBACK == 1
+            if (OpticalFlowPyramidLevel() == 0 && blockSadSum <= (minSad >> 16u))
+--- end

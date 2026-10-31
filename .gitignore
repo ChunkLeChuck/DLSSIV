@@ -1,0 +1,28 @@
+# Build output
+*.asi
+*.obj
+*.res
+*.exp
+*.lib
+*.pdb
+*.ilk
+*.map
+*.exe
+*.dll
+obj/
+__pycache__/
+*.log
+
+# NVIDIA's and Intel's files: fetched by tools/fetch-ngx.ps1 and tools/fetch-xess.ps1, never committed
+external/ngx/include/
+external/ngx/lib/
+external/ngx/LICENSE-NVIDIA-DLSS-SDK.txt
+external/ngx/*.download
+external/xess/inc/
+external/xess/LICENSE-Intel-XeSS.txt
+external/xess/*.zip
+external/xess/*.download
+
+# Runtime files a developer places by hand (AMD's FidelityFX DLLs, DXVK, the DLSS runtime): never committed
+external/ffx/*.dll
+external/dxvk/**/*.dll

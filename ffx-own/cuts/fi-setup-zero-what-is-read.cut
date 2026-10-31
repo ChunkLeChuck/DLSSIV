@@ -1,0 +1,63 @@
+# THE SETUP PASS WRITES ONLY WHAT A LATER PASS READS (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The first pass of every dispatch runs one thread for every pixel of the guides (2560x1440 or
+# 3840x2160) and each thread stores six things: the pyramid counter (the same zero into the same one cell, from every
+# thread), a zero into the game vector field's X and Y, a zero into optical flow's vector field's X and Y, and a zero
+# into the disocclusion mask.
+#
+# WHAT IS READ OF THEM, BY THE SOURCE (tag v2.3.0):
+#   - THE GAME VECTOR FIELD (X and Y): the game motion vector field pass takes the maximum of what is there and what it
+#     has, at every pixel of the guides. The zero is its start value: KEPT, every pixel.
+#   - OPTICAL FLOW'S VECTOR FIELD (X and Y): written by one pass alone, and only at positions inside optical flow's own
+#     size, 480x270 at a 3840x2160 display (ffx_frameinterpolation_optical_flow_vector_field.h: "IsOnScreen(iSamplePos,
+#     GetOpticalFlowSize2())" before the one update), and read by one function alone, which tests every position with
+#     the same words before it loads (ffx_frameinterpolation_common.h, SampleOpticalFlowMotionVectorField; the
+#     interpolation pass and the debug view call it). The images are as large as the guides; outside 480x270 nothing
+#     ever reads them. THE ZERO IS KEPT INSIDE THAT SIZE AND LEFT OUT OUTSIDE IT: 1 pixel in 28 at Quality's guides,
+#     1 in 64 at DLAA's.
+#   - THE DISOCCLUSION MASK: the disocclusion mask pass stores every pixel the setup pass zeroes (the two are
+#     dispatched with the same size: ffx_frameinterpolation.cpp 1184 and 1236), with no read of what was there, before
+#     the one pass that reads it (the interpolation pass, 1239). That pass runs in every dispatch that is not a reset.
+#     In a reset dispatch it does not run, and nothing but the debug view can then read the mask. THE ZERO IS KEPT IN A
+#     RESET DISPATCH (so that even the debug view draws what AMD's draws) AND LEFT OUT IN EVERY OTHER.
+#   - THE PYRAMID COUNTER: one cell. It is stored by the one thread of pixel (0, 0), beside the frame counter that
+#     thread already keeps, and no longer by every thread: the same value in the same cell when the pass ends.
+#
+# MEASURED 2026-10-10 (3840x2160 FP16, the two-image set, three rounds, spread 1 us or less; the same images on every
+# hashed pair, 120 of 120 at both guide sizes): the setup pass 36 -> 29 us at Quality's guides, 79 -> 62 at DLAA's.
+# LEFT OUT: the cut fi-setup-by-clears takes the same pass to 17 and 30 us and needs no edit of the shader.
+what the setup pass (I1) zeroes optical flow's vector field only inside optical flow's size, the disocclusion mask only at a reset, and stores the counter from one thread
+passes ffx_frameinterpolation_setup_pass
+wave64 it edits one shader file that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; it uses no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_setup.h
+--- old
+    // Update reset counters
+    StoreCounter(COUNTER_SPD, 0);
+    if (all(FFX_EQUAL(iPxPos, FfxInt32x2(0, 0))))
+    {
+--- new
+    // Update reset counters
+    if (all(FFX_EQUAL(iPxPos, FfxInt32x2(0, 0))))
+    {
+        StoreCounter(COUNTER_SPD, 0);    // (the mod's cut fi-setup-zero-what-is-read: one cell, stored once)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_setup.h
+--- old
+    StoreOpticalflowMotionVectorFieldX(iPxPos, 0);
+    StoreOpticalflowMotionVectorFieldY(iPxPos, 0);
+
+    StoreDisocclusionMask(iPxPos, FfxFloat32x2(0.0, 0.0));
+--- new
+    // (the mod's cut fi-setup-zero-what-is-read: optical flow's field is written and read inside optical flow's size
+    // alone; the disocclusion mask is rewritten whole before its one reader in every dispatch that is not a reset)
+    if (IsOnScreen(iPxPos, GetOpticalFlowSize2()))
+    {
+        StoreOpticalflowMotionVectorFieldX(iPxPos, 0);
+        StoreOpticalflowMotionVectorFieldY(iPxPos, 0);
+    }
+
+    if (Reset())
+    {
+        StoreDisocclusionMask(iPxPos, FfxFloat32x2(0.0, 0.0));
+    }
+--- end

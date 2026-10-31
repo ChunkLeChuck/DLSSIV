@@ -1,0 +1,29 @@
+# A VARIANT, NEVER THE PRODUCT: THE GUIDES CAPPED AT QUALITY'S SIZE (2026-10-11; stage 3's report, part D and "For
+# stage 5", item 3). IT CHANGES THE PICTURE WHERE THE GUIDES ARE LARGER THAN THE CAP (DLAA and the modes above Quality);
+# at Quality and below it is the product's picture. Built only into a variant library (build-ffx-own.ps1 -Variant).
+#
+# Everything the interpolation does at the guides' size (the prepare, the game's vector field and its pyramid, the
+# disocclusion mask) costs by the guides' pixels: 714 us of a pair at DLAA before stage 3, about 230 after it. Stage 3
+# priced a cap as a pass of our own before the library (69 us). HERE THE CAP COSTS NO PASS: the library is told that
+# the guides have two thirds of the display on each axis (2560x1440 on a 3840x2160 display), and its first pass, which
+# already looks for the nearest depth among nine texels round each pixel and takes that texel's vector, looks for them
+# round the pixel's place IN THE GAME'S OWN DEPTH, at its own size. Every later pass works at the cap. The glue
+# (ffx-own\glue\dlssiv_fg.cpp, DLSSIV_FG_CUT_GUIDE_CAP) caps the size it hands AMD's prepare and dispatch and scales the
+# vector scale and the jitter with it, and only where the game's depth and vectors are textures of exactly the size it
+# was told: the pass reads their size from the depth texture.
+what A VARIANT (the picture changes above Quality): the guides are capped at two thirds of the display on each axis; the prepare pass (P1) reads the game's depth and vectors at their own size and every later pass works at the cap
+passes ffx_frameinterpolation_reconstruct_and_dilate_pass
+wave64 the same edit in both variants: the pass has no wave operation
+define DLSSIV_FG_CUT_GUIDE_CAP
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_reconstruct_dilated_velocity_and_previous_depth.h
+--- old
+    FindNearestDepth(iPxLrPos, RenderSize(), fDilatedDepth, iNearestDepthCoord);
+--- new
+    // (the variant v-guide-cap) the nine texels round this pixel's place in the game's own depth, at its own size
+    // (where the two sizes are the same, the place is the pixel itself)
+    FfxUInt32 uGuideWidth, uGuideHeight;
+    r_input_depth.GetDimensions(uGuideWidth, uGuideHeight);
+    const FfxInt32x2 iGuideSize = FfxInt32x2(uGuideWidth, uGuideHeight);
+    const FfxInt32x2 iPxGuidePos = FfxInt32x2((FfxFloat32x2(iPxLrPos) + 0.5f) * FfxFloat32x2(iGuideSize) / FfxFloat32x2(RenderSize()));
+    FindNearestDepth(iPxGuidePos, iGuideSize, fDilatedDepth, iNearestDepthCoord);
+--- end

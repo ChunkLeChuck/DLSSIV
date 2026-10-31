@@ -1,0 +1,29 @@
+# THE OPTICAL FLOW VECTOR FIELD PASS LOOKS AT A CELL BEFORE IT TAKES AN ATOMIC ON IT (2026-10-10, the own build's stage 3).
+#
+# The same cut as fi-game-field-test-first, on the pass that builds optical flow's vector field (480x270 threads, eight
+# atomic maxima a thread whose vector is longer than a pixel): the setup pass zeroed the field, every write of this pass
+# is an atomic maximum, nothing reads the field inside the pass, so a value that is not larger than what a plain load
+# finds in the cell cannot change its final value, and the atomic is taken only when it is larger. This pass has no
+# secondary walk: the argument is whole.
+#
+# MEASURED 2026-10-10 (3840x2160 FP16, the two-image set, three rounds, spread 1 us or less; the same images on every
+# hashed pair, 120 of 120 at both guide sizes): the optical flow vector field pass 21 -> 17 us at Quality's guides,
+# 29 -> 26 at DLAA's.
+# LEFT OUT: under 5 us at both guide sizes.
+what the optical flow vector field pass (I6) loads a cell before each atomic maximum and takes it only when its value is larger than what is there
+passes ffx_frameinterpolation_optical_flow_vector_field_pass
+wave64 it edits one shader file that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_optical_flow_vector_field.h
+--- old
+                UpdateOpticalflowMotionVectorField(iSamplePos, packedVectorPrimary);
+--- new
+                // (the mod's cut fi-optical-flow-field-test-first: a cell only grows in this pass)
+                if (rw_optical_flow_motion_vector_field_x[iSamplePos] < packedVectorPrimary.x)
+                {
+                    InterlockedMax(rw_optical_flow_motion_vector_field_x[iSamplePos], packedVectorPrimary.x);
+                }
+                if (rw_optical_flow_motion_vector_field_y[iSamplePos] < packedVectorPrimary.y)
+                {
+                    InterlockedMax(rw_optical_flow_motion_vector_field_y[iSamplePos], packedVectorPrimary.y);
+                }
+--- end

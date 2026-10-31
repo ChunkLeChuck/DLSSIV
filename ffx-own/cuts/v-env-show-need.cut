@@ -1,0 +1,45 @@
+# AN INSTRUMENT, NEVER THE PRODUCT: WHAT THE VARIANT v-env DID TO A PIXEL'S TWO SAMPLES, AS NUMBERS IN THE PICTURE (2026-10-12; what is
+# left of the ghost near the back bumper, docs\reports\fg-3\sitting-2026-10-12\lib4). On top of v-env. Every pixel
+# of the generated image comes out as three numbers a replay can read back (tools\test-fg-own\lib4.py):
+#   red     the log of the brightness's gain APPLIED to the frame before's sample (0 where none)
+#   green   the same of the current frame's sample
+#   blue    the current frame's share of the pair as the pass used it (0: the frame before's sample alone, 1: the
+#           current frame's alone)
+# and nothing is inpainted, so that the numbers stand.
+what AN INSTRUMENT (the picture changes): with v-env, every pixel is painted with the two log gains applied to its two samples and the current sample's share
+passes ffx_frameinterpolation_pass
+wave64 the same edit in both variants: the pass has no wave operation
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FfxBoolean envRelight(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, inout FfxFloat32x3 fPrevRaw, inout FfxFloat32x3 fCurrRaw, out FfxFloat32 fEnvT, out FfxFloat32 fEnvShare)
+--- new
+// (the instrument v-env-show-need)
+static FfxFloat32x3 g_envShow = FfxFloat32x3(0.0f, 0.0f, 0.5f);
+
+FfxBoolean envRelight(FfxFloat32x2 fUv, FfxFloat32x2 fHalfUv, inout FfxFloat32x3 fPrevRaw, inout FfxFloat32x3 fCurrRaw, out FfxFloat32 fEnvT, out FfxFloat32 fEnvShare)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+--- new
+        fInterpolatedColor = ffxLerp(fPrevColorGame.fRaw, fCurrColorGame.fRaw, ffxSaturate(t));
+        // (the instrument v-env-show-need)
+        g_envShow.z = ffxSaturate(t);
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+--- new
+        fInterpolatedColor = ffxLerp(ofColor, fInterpolatedColor, ffxSaturate(fGameMvBias));
+        // (the instrument v-env-show-need)
+        fInterpolatedColor = g_envShow;
+        fInPaintingWeight  = 0.0f;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+    fPrevRaw *= envGain(fNeedPrev * fBelievedPrev * fPower);
+--- new
+    // (the instrument v-env-show-need)
+    g_envShow.xy = FfxFloat32x2(fNeedPrev.x * fBelievedPrev.x, fNeedCurr.x * fBelievedCurr.x);
+    fPrevRaw *= envGain(fNeedPrev * fBelievedPrev * fPower);
+--- end

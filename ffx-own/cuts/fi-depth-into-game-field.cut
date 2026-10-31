@@ -1,0 +1,74 @@
+# THE DEPTH SPLAT OF THE RECONSTRUCT-PREVIOUS-DEPTH PASS, DONE BY THE GAME MOTION VECTOR FIELD PASS (2026-10-10, the own
+# build's stage 3).
+#
+# WHAT AMD'S CODE DOES. Two passes in a row run one thread for every pixel of the guides, and both begin the same way:
+# they load the pixel's dilated depth and its dilated motion vector, and work out the four pixels the half vector lands
+# between in the generated frame (GetBilinearSamplingData of "the pixel's centre plus half its vector").
+#   reconstruct previous depth   at each of the four that is on screen and has a bilinear weight above the threshold,
+#                                the nearest depth wins (one atomic maximum or minimum into the estimated depth of the
+#                                generated frame). Nothing else.
+#   game motion vector field     at each of the four that is on screen, the vector with the highest priority wins (two
+#                                atomic maxima); then the secondary vectors.
+# The first pass's four positions and its depth are values the second pass computes anyway, by the same expressions on
+# the same loads (ffx_frameinterpolation_reconstruct_previous_depth.h 53 to 60 and 28 to 49 against
+# ffx_frameinterpolation_game_motion_vector_field.h 37 to 50 and 67 to 78).
+#
+# THE CUT. The game motion vector field pass also does the first pass's atomic update, inside its own loop over the
+# four positions, on its own values: one more image bound to it for writing (the estimated depth of the generated
+# frame, by the name the first pass binds it under), and one condition, the first pass's weight threshold. The dispatch
+# of the reconstruct-previous-depth pass is no longer scheduled (one line of ffx_frameinterpolation.cpp); its pipeline is
+# still created, as every permutation is, and never run. The clear of that image stays where it is, before both.
+# An atomic maximum does not depend on the order of its updates, and nothing reads that image before the disocclusion
+# mask pass, three passes later.
+# The update it does is written with the look first of the cut fi-depth-test-first (a plain load of the cell, and the
+# atomic only when this depth is nearer), whether that cut is in or not.
+#
+# MEASURED: see docs\reports\fg-3\own-build-2026-10-06\stage-3 (the table of cuts).
+what the game motion vector field pass (I4) also does the depth splat of the reconstruct-previous-depth pass (I3), which is no longer dispatched
+passes ffx_frameinterpolation_game_motion_vector_field_pass
+wave64 it edits a shader file and its pass file that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from, and one line of ffx_frameinterpolation.cpp that runs on every device; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_game_motion_vector_field_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_GAME_MOTION_VECTOR_FIELD_X              0
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_GAME_MOTION_VECTOR_FIELD_Y              1
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_GAME_MOTION_VECTOR_FIELD_X              0
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_GAME_MOTION_VECTOR_FIELD_Y              1
+#define FFX_FRAMEINTERPOLATION_BIND_UAV_RECONSTRUCTED_DEPTH_INTERPOLATED_FRAME  2
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_game_motion_vector_field.h
+--- old
+            const FfxInt32x2 iSamplePos = bilinearInfo.iBasePos + iOffset;
+
+            if (IsOnScreen(iSamplePos, RenderSize()))
+            {
+--- new
+            const FfxInt32x2 iSamplePos = bilinearInfo.iBasePos + iOffset;
+
+            if (IsOnScreen(iSamplePos, RenderSize()))
+            {
+                // (the mod's cut fi-depth-into-game-field: the depth splat of the reconstruct-previous-depth pass. The
+                // update is AMD's UpdateReconstructedDepthInterpolatedFrame with the look first of the cut
+                // fi-depth-test-first: the atomic is taken only when this depth is nearer than what is there)
+                if (bilinearInfo.fWeights[iSampleIndex] > fReconstructedDepthBilinearWeightThreshold)
+                {
+                    const FfxUInt32 uDepthSample = ffxAsUInt32(fDepthSample);
+#if FFX_FRAMEINTERPOLATION_OPTION_INVERTED_DEPTH
+                    if (rw_reconstructed_depth_interpolated_frame[iSamplePos] < uDepthSample)
+                    {
+                        InterlockedMax(rw_reconstructed_depth_interpolated_frame[iSamplePos], uDepthSample);
+                    }
+#else
+                    if (rw_reconstructed_depth_interpolated_frame[iSamplePos] > uDepthSample)
+                    {
+                        InterlockedMin(rw_reconstructed_depth_interpolated_frame[iSamplePos], uDepthSample);
+                    }
+#endif
+                }
+--- end
+file framegeneration/fsr3/internal/ffx_frameinterpolation.cpp
+--- old
+            scheduleDispatch(contextPrivate, &contextPrivate->pipelineFiReconstructPreviousDepth, renderDispatchSizeX, renderDispatchSizeY);
+--- new
+            // (the mod's cut fi-depth-into-game-field: the next pass does this one's depth splat; this one is not dispatched)
+--- end

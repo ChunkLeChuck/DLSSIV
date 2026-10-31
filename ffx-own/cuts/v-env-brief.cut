@@ -1,0 +1,39 @@
+# A VARIANT TO COMPARE WITH, NEVER THE PRODUCT: v-env WITH THE DESK'S OWN FORM AND NUMBERS (2026-10-11; BRIEF-env.md, rules 1 to 4, and
+# mock5.py with trust=0.3 env=0.25 both=1 nou=1). On top of v-env, constants only:
+#   the envelopes sink and rise by the plain step alone (ENV_STEP a frame; all that is left where that is less);
+#   the dead band is one number: nothing where the gain is under 0.05 of the log, whole from 0.10 on; the gap between
+#     a place's two envelopes counts for nothing;
+#   brightness alone: no tint is relit.
+# It is here so that the two forms can be read side by side on the captured runs (tools\test-fg-own\env.py): this one
+# relights most of the plain moving ground by the ground's own grain, and leaves the tail light's red second outline
+# as red as the product's; v-env does neither.
+what A VARIANT (the picture changes): v-env with the desk's own form, the plain step of the envelopes, a dead band of one number and brightness alone
+passes ffx_frameinterpolation_pass, ffx_frameinterpolation_disocclusion_mask_pass
+wave64 the same edits in both variants: constants only
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+FFX_STATIC const FfxFloat32 ENV_SHARE      = 0.3f;
+FFX_STATIC const FfxFloat32 ENV_SHARE_MOST = 0.9f;      // (a share of 1 is the plain step: all that is left where that is less)
+--- new
+FFX_STATIC const FfxFloat32 ENV_SHARE      = 1.0e9f;    // (the variant v-env-brief) the plain step alone
+FFX_STATIC const FfxFloat32 ENV_SHARE_MOST = 1.0f;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FFX_STATIC const FfxFloat32 ENV_TINT_MOST     = 1.0f;       // a tint's gain is held within 1/e and e
+--- new
+FFX_STATIC const FfxFloat32 ENV_TINT_MOST     = 0.0f;       // (the variant v-env-brief) brightness alone: no tint is relit
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation.h
+--- old
+FFX_STATIC const FfxFloat32 ENV_GATE_BY_WIDTH = 1.0f;       // the gap between a place's two envelopes counts this much
+FFX_STATIC const FfxFloat32 ENV_GATE_WIDTH    = 0.05f;      // and this is added to it
+FFX_STATIC const FfxFloat32 ENV_GATE_0        = 0.4f;       // nothing where a gain is under this times that
+FFX_STATIC const FfxFloat32 ENV_GATE_1        = 0.8f;       // whole from this times that on
+--- new
+// (the variant v-env-brief) a dead band of one number: nothing under 0.05 of the log, whole from 0.10 on
+FFX_STATIC const FfxFloat32 ENV_GATE_BY_WIDTH = 0.0f;
+FFX_STATIC const FfxFloat32 ENV_GATE_WIDTH    = 1.0f;
+FFX_STATIC const FfxFloat32 ENV_GATE_0        = 0.05f;
+FFX_STATIC const FfxFloat32 ENV_GATE_1        = 0.10f;
+--- end

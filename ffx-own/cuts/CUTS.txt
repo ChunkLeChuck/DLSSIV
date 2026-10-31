@@ -1,0 +1,161 @@
+# THE CUTS OF THE MOD'S OWN FRAME GENERATION LIBRARY (the own build's stage 3: cuts that cannot change the picture).
+# One cut a line: its name (the file <name>.cut beside this one says what it is and holds its edits) and its state:
+#     in        AN EXACT CUT: it changes no bit of a generated image. It is in the product (dlssiv-fg.dll) and in THE EXACT
+#               LIBRARY (dlssiv-fg-exact.dll: these cuts and no other), which the judge holds, pair by pair, to the
+#               reference with no cut and to AMD's signed library
+#     out       it was tried and is left out (its file says why, with its numbers)
+#     control   NEVER in the product: a deliberate change of the picture that the judge must fail on
+#     picture   NEVER in the product: a cut that CHANGES THE PICTURE and that nobody accepted, built only into a variant
+#               library of its own name for the owner's eye (build-ffx-own.ps1 -Variant; tools\ffx-own\build_variants.py)
+#     accepted  A PICTURE CUT OF THE PRODUCT (since 2026-10-12): it changes the picture AND THE OWNER ACCEPTED THAT PICTURE IN
+#               THE GAME. It is in the product and never in the exact library; the product's pictures on the judge's own
+#               set are pinned by digest (tools\ffx-own\PICTURES-dlssiv-fg.txt). The comment above such a line names the
+#               sitting it was accepted on. EVERY "in" LINE STANDS BEFORE EVERY "accepted" LINE (cuts.py refuses otherwise).
+# A cut whose file begins with the line "frozen-as <name>" is that cut's text as it stood on a day, kept under a new name
+# (v-env-1 is v-env as the owner ran it in the game on 2026-10-12): tools\ffx-own\cuts.py says how its digest is taken.
+# The order of the lines is the order the cuts are applied in. tools\ffx-own\cuts.py reads this file for the build
+# (build-ffx-own.ps1 -Target dlssiv-fg); -Cuts builds another set. The record of the product
+# (tools\ffx-own\RECORD-dlssiv-fg-cut.txt) holds one digest of its cuts, the exact ones and the accepted ones; the record
+# of the exact library (tools\ffx-own\RECORD-dlssiv-fg-exact.txt) one of the cuts marked "in".
+# WHAT A NEW CUT HAS TO DO TO GET IN (tools\prove-ffx-own.py and tools\test-fg-own\run.py say each step again):
+#     AN EXACT CUT: "in"; python tools\ffx-own\cuts.py gen; python tools\prove-ffx-own.py --new-record-exact, commit, then
+#         --new-record-cut, commit; then the judge (python tools\test-fg-own\run.py --ours) must say that the exact
+#         library equals the reference in every pair AND that the product's pictures are still the pinned ones: the pin
+#         is NOT made again for an exact cut.
+#     A PICTURE CUT: "picture" and a variant library first; the owner's eye in the game; then, on the owner's word, its line
+#         moves behind the last "in" line as "accepted" with the sitting named above it; cuts.py gen; --new-record-cut;
+#         and python tools\test-fg-own\run.py --ours --new-pictures, which writes the pin again and prints what it replaced.
+fi-game-field-test-first in
+fi-depth-test-first in
+fi-depth-into-game-field in
+fi-setup-by-clears in
+fi-no-distortion-field in
+of-filter-into-scale in
+of-search-by-rows in
+fi-setup-zero-what-is-read out
+fi-inpainting-load-on-demand out
+fi-inpainting-blocks out
+fi-optical-flow-field-test-first out
+of-search-one-store out
+of-search-reductions out
+of-search-sums-by-minimum in
+fi-inpainting-by-blocks in
+of-reset-no-luma-clears in
+fi-interpolation-same-vector-once in
+of-search-window-by-gather in
+of-scd-no-empty-adds out
+fi-inpainting-keeps-the-source in
+fi-position in
+fi-store-apart in
+control-one-pixel control
+control-position control
+control-store-first control
+control-count-again control
+# ACCEPTED 2026-10-12, 15:13 (docs\reports\fg-3\sitting-2026-10-12b\READING.md: the candidate library v-ship on F1C flw and flh,
+# both PASS; the owner: "its pretty great ... I think its fine"): v-search-half, v-no-inpainting-pyramid and v-env.
+# Their names and their files are the ones the owner ran, so the product's digest of its cuts is v-ship's (f828cc92...).
+v-search-half accepted
+v-interpolation-filtered-lookups picture
+# ACCEPTED 2026-10-14, 16:05 (docs\reports\fg-4\sitting-2026-10-14b: tools\test-fg-own\lib4.py dlaa on the owner's F1C capa, five runs at DLAA;
+# the wrong pixels within about 1 percent of the product's, the worst places the product's own faults; the owner on the flips: "I dont see
+# any meaningful difference, the savings are probably outweigh any extra artifacting"): a DLAA pair 1,031 -> 838 us at the desk, Quality
+# identical (the guides are already at the cap there).
+v-guide-cap accepted
+v-no-inpainting-pyramid accepted
+v-game-field-no-secondary picture
+v-no-scene-change-detector picture
+v-ghost picture
+v-ghost-show-gate picture
+v-env-1 picture
+v-env accepted
+# (2026-10-18, the true fill's package G1, BY ITS BRIEF: docs\reports\fg-5\brief-truefill\BRIEF-G1-lib.md, part 3, "build it only if it is small
+# and exact at 0.5") v-env AT ITS PLACE: AT THE MIDDLE IT IS v-env's PICTURE, BIT FOR BIT, so the owner's acceptance of v-env stands for it there
+# and the pin of the product's pictures is not made again (the judge, step 9, holds it). At a third it changes the picture; nothing of the mod
+# asks for a third on 2026-10-18, and the owner's eye judges every picture at a third (the true fill's leg 6). Withdrawn: "picture".
+v-env-position accepted
+# IN THE PRODUCT SINCE 2026-10-12 BY THE OWNER'S BRIEF, SEEN FIXED BY HIS EYE 2026-10-14 (docs\reports\fg-4\brief-2026-10-12\BRIEF-phone-cover.md,
+# part 3: "the library's inpainting step takes the presented pixel in full where the alpha says cover"). It stands with the
+# picture cuts because it is the product's alone and never the exact library's: it changes the picture WHERE THE HUD-LESS
+# PICTURE'S ALPHA IS 0, which only the mod's encode of a frame with the phone up writes; with alpha 1 on every pixel the
+# product's pictures are the pinned ones, bit for bit (the pin's list of picture cuts and its digest were written again, 3 to 4,
+# with those pictures unchanged). Built 2026-10-13 as a new product record (dlssiv-fg.dll 809,984 bytes, SHA-256 141b3f50...,
+# docs\DECISIONS.md, "fi-cover-in-alpha"), installed 2026-10-14, and seen fixed by the owner's eye that day (docs\DECISIONS.md, "THE SITTING OF THE MORNING").
+# The cut is therefore accepted for good; it would become "picture" again, and the record be made again, only if he withdrew it.
+fi-cover-in-alpha accepted
+v-env-less-creep picture
+v-env-less-apart picture
+v-env-less-moved picture
+v-env-show-gate picture
+v-env-show-need picture
+v-env-brief picture
+v-env-quarter picture
+v-show-interpolation-alone picture
+v-show-fields picture
+v-show-flow picture
+# (2026-10-12, the leftovers: sitting-2026-10-12b) TRIED ON TOP OF THE PRODUCT AND NOT MENDS, each file's head has its numbers: the variant
+# libraries "next" and "next-creep" (tools/ffx-own/build_variants.py)
+v-field-depth-then picture
+v-env-creep-far picture
+# (2026-10-25, the patch at the bottom edge where the car's shadow meets it: docs\reports\fg-5\desk-2026-10-25-edge, READING.md and FIX.md)
+# ON TOP OF THE PRODUCT: in the band where the current frame's sample is off the screen, its own pixel at the place, by
+# the lone sample's need of brightness gain. The variant library "edge" (tools/ffx-own/build_variants.py), for the owner's eye
+# ACCEPTED 2026-10-25, evening (docs\reports\fg-5\sitting-2026-10-25b\READING.md: the three-way edge legs on pair 93b3ef9b, edgeB ran
+# v-edge, 4786defe; the owner: "edgeB looked the cleanest, not perfect but the cleanest"). Its file is the one the owner ran, byte for
+# byte, so the product's digest of its cuts holds the text of that leg; the variant "edge" is kept FROZEN as those bytes
+# (tools\ffx-own\build_variants.py), the anchor the two cuts below are held to.
+v-edge accepted
+# (2026-10-25, round 8, E2: docs\reports\fg-5\opt-2026-10-25\MEMORY-AND-PRESENTER.md, item 2) A CUT OF THE PRODUCT'S MEMORY, EXACT ON
+# ITS PICTURE: the pin of the product's pictures does not move by it, and the frozen "edge" (v-edge without it) makes the product's
+# pictures pair by pair on the judge's set (tools\test-fg-own\run.py --ours --pictures --pictures-of=) and on the owner's DLAA capture
+# (the three-replay rule). It stands here, with the picture cuts, so that v-edge and it make one record of the product; it is not
+# in the exact library, whose record stands.
+fi-one-shared-set accepted
+# (2026-10-25, round 8, E2, item 1) NOT EXACT, SO A PICTURE CUT FOR THE OWNER'S EYE, NOT IN THE PRODUCT: the judge's own set showed no
+# difference in any pair, and the owner's DLAA capture (fg-capture\20261014-153300-mvright, run 1) about 8,000 pixels a generated
+# frame steady in three replays of each library, spread over the whole frame (its file has the numbers). The variant
+# "guide-images-at-cap" (tools\ffx-own\build_variants.py) is the product with it.
+fi-guide-images-at-cap picture
+# (2026-10-25, FIX2.md beside FIX.md) v-edge's one more try, ON TOP OF v-edge: the variant library "edge2". Better than v-edge on the
+# desk, 6 to 13 us dearer on the game's frames. Not kept by the cost bound; THEN GIVEN ITS RECORD ON THE MAIN SESSION'S WORD (the patch
+# 80 to 90 percent less for about 1 percent of a generated frame's cost: the owner's eye decides), for the A/B leg beside v-edge
+# OUT 2026-10-25, evening: on the owner's leg edgeC (v-edge2) the edge was NOT clean; v-edge won (sitting-2026-10-25b\READING.md)
+v-edge2 out
+# (2026-10-26, round 9's V2: docs\reports\fg-5\desk-2026-10-26-ghosts) THE TYRE'S FOOT, ON TOP OF THE PRODUCT: the occlusion test's taps
+# that the depth cannot separate are separated by the vector, where the thing at the tap moves unlike the pixel. The variant library
+# "hide-by-vector" (tools/ffx-own/build_variants.py), for the owner's eye.
+# ACCEPTED 2026-10-27 with the three below as the variant "tyre" (the owner's blind A/B of that afternoon, sitting-2026-10-27\READING.md:
+# tyreA, "cleaner", "less ghosting"); the frozen "tyre" in build_variants.py is the bytes he ran.
+v-hide-by-vector accepted
+# (2026-10-27, round 9's tyre desk: docs\reports\fg-5\desk-2026-10-27-tyres) TWO INSTRUMENTS ON THE PRODUCT, never a fix: v-env without its trust,
+# and v-env's two brightness needs before its gate with the current sample's share, as numbers in the picture
+v-env-no-trust picture
+v-env-show-trust picture
+v-show-current picture
+v-show-previous picture
+# (2026-10-27, round 9's tyre desk) TRIED AND OUT: where both samples are used and one lies far outside the light the place has been seen to hold
+# while the other lies within it, the blend takes the one that fits. It did not take the copy away and it speckled the tyre's tread (its file).
+v-env-fit out
+# (2026-10-27, round 9's tyre desk: docs\reports\fg-5\desk-2026-10-27-tyres\FINDINGS.md) THE FIX OF THE TYRE'S COPY, FOR THE OWNER'S EYE: the variant
+# library "tyre" (tools/ffx-own/build_variants.py) is the product with v-hide-by-vector and these three:
+#   v-hide-reach    on top of v-hide-by-vector: the tyre that bounced up between the two real frames, and the tyre's contact row
+#   v-env-darker    v-env may darken a sample down to 1/128 (sunlit road put into the car's shade)
+#   v-lone-place    a lone sample behind a thing that stays on the screen, bringing another light into a place whose light both real frames
+#                   agree on: the current frame's pixel at the place (v-edge's means)
+# ACCEPTED 2026-10-27, the four as one (the owner's blind A/B: tyreA, "cleaner", "less ghosting"; sitting-2026-10-27\READING.md). The
+# variants that compared them (tyre-copy, hide-reach, darker and the instruments with them) left build_variants.py with it.
+v-hide-reach accepted
+v-env-darker accepted
+v-lone-place accepted
+# (2026-10-28, the tyre's leftovers: docs\reports\fg-5\desk-2026-10-28-tyre-leftovers\FINDINGS.md) AN INSTRUMENT ON THE PRODUCT, never a fix:
+# what the occlusion pass decided at a pixel (v-hide-reach's numbers) as numbers in the picture
+v-show-hide picture
+# (2026-10-28, the same desk) THE TYRE'S TWO LEFTOVERS, ON TOP OF THE PRODUCT, FOR THE OWNER'S EYE: the variant library "tyre2" (tools\ffx-own\build_variants.py)
+# is the product with both; "reach-nearer" and "ahead-before" each alone
+#   v-reach-nearer  the thin dark line at the very foot: v-hide-reach's bounce test takes a thing up to 6 percent farther than the pixel (2 before)
+#   v-ahead-before  the light specks on the tyre's front side: where both samples are hidden and the thing at the frame before's fetch place
+#                   moves like the pixel, the frame before's sample is visible
+# OUT 2026-10-28, the owner's blind A/B (tyreA the product, tyreB tyre2): "not sure honestly. maybe tyrreA was cleaner"; W recorded no
+# difference. A third less of each leftover at the desk is not seen in the game, at a small cost (G2's specks +6 percent, +1 to 2 us):
+# not kept, the tyre item closed (docs\reports\fg-5\desk-2026-10-28-tyre-leftovers\FINDINGS.md, section 8)
+v-reach-nearer out
+v-ahead-before out

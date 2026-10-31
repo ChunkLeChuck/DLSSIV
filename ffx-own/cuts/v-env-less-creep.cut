@@ -1,0 +1,23 @@
+# v-env WITH ONE OF ITS THREE MENDS OF 2026-10-12 TAKEN OUT, to judge and to price that mend by itself (ffx-own\cuts\v-env.cut says what
+# the mend is; docs\reports\fg-3\sitting-2026-10-12\lib4\README.md has its numbers). On top of v-env, never without it.
+what A VARIANT (the picture changes): v-env without its mend 3 (the envelopes creep)
+passes ffx_opticalflow_prepare_luma_pass
+wave64 the same edit in both variants: no wave operation
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_prepare_luma.h
+--- old
+
+        // (MEND 3, THE ENVELOPES CREEP) A LIGHT THAT STAYS WITH A THING THAT SHIFTS ON THE SCREEN (the car's own shadow as the car drifts a
+        // pixel or two a frame) covers new places all the time, and there the upper envelope would take a dozen frames
+        // to sink to it. Where the frame lies under the upper envelope, that envelope may not stay more than
+        // ENV_CREEP_SLACK above the lowest one ENV_CREEP texels away: what has sunk next door has sunk here. A shadow that
+        // streams past with the ground outruns this (its neighbours were lit a frame ago too); one that creeps takes
+        // its envelope along. The same for the lower envelope and a pool of light that creeps.
+        const FfxInt32x2   iMost = iSize - 1;
+        const FfxFloat32x2 fW = r_env_previous[clamp(iTexel + FfxInt32x2(-ENV_CREEP, 0), FfxInt32x2(0, 0), iMost)];
+        const FfxFloat32x2 fE = r_env_previous[clamp(iTexel + FfxInt32x2(ENV_CREEP, 0), FfxInt32x2(0, 0), iMost)];
+        const FfxFloat32x2 fN = r_env_previous[clamp(iTexel + FfxInt32x2(0, -ENV_CREEP), FfxInt32x2(0, 0), iMost)];
+        const FfxFloat32x2 fS = r_env_previous[clamp(iTexel + FfxInt32x2(0, ENV_CREEP), FfxInt32x2(0, 0), iMost)];
+        fEnv.x = ffxMax(fLog, ffxMin(fEnv.x, ffxMin(ffxMin(fW.x, fE.x), ffxMin(fN.x, fS.x)) + ENV_CREEP_SLACK));
+        fEnv.y = ffxMin(fLog, ffxMax(fEnv.y, ffxMax(ffxMax(fW.y, fE.y), ffxMax(fN.y, fS.y)) - ENV_CREEP_SLACK));
+--- new
+--- end

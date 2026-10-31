@@ -1,0 +1,124 @@
+# A VARIANT, NEVER THE PRODUCT: ON TOP OF v-hide-by-vector, THE TYRE'S FOOT WHERE THAT CUT STILL MISSES IT, AND ITS TEST MADE CHEAPER AND
+# NARROWER (2026-10-27; round 9's tyre desk, docs\reports\fg-5\desk-2026-10-27-tyres: FINDINGS.md). IT CHANGES THE PICTURE, ONLY WHERE
+# THE OCCLUSION TEST CALLED THE FRAME BEFORE'S SAMPLE VISIBLE.
+#
+# WHAT IS LEFT AFTER v-hide-by-vector, on the capture of 2026-10-27:
+#   THE BOUNCE. The tyre bounces on its springs: between two real frames its foot moves up by a few pixels (4.2 px in run 5; its
+#     vector says so). The road just under the new foot is tyre in the frame before and road now, so neither AMD's depth test (the
+#     contact: within half a percent) nor v-hide-by-vector's (the vector at the place is the road's now) sees it.
+#   THE CONTACT ROW. At the very foot the road the pixel shows lies lower on the screen than the tyre's last row at the fetch place,
+#     a little NEARER than it, and AMD's test weighs only a tap that is nearer than the pixel: it never weighs that tap.
+#   Both leave a thin dark band, a copy of the foot's edge, half a road step behind it.
+# AND v-hide-by-vector TOOK A THING THAT MOVES FASTER THAN THE PIXEL TOO (a lamp post before a far wall while the camera pans: it made
+# more of the product's doubled post, run 3 frame 10), and it read the vector at each of the four taps of the test: 11.8 us a
+# generated frame on the game's frames (tools\test-fg-own\fgtime.cpp, run 5), not the 1 us of the made picture.
+# THE CUT, in the occlusion pass, for the frame before's side alone, ONCE A PIXEL that moves (whole vector over HBV_MIN_PX):
+#   the current frame's dilated vector AT THE FETCH PLACE: the thing there STAYS where it moves unlike the pixel (v-hide-by-vector's
+#     rule) and at most HBV_STAY (a quarter) of the pixel's motion: the car and its tyres over the streaming road. That one answer
+#     stands for the four taps (v-hide-by-vector's per-tap read is replaced by it); and a tap a little FARTHER than the pixel (by
+#     less than HBV_BEHIND, the contact row) is weighed too where the thing stays;
+#   the current frame's dilated vector REACH px ABOVE the fetch place: where the thing there stays and ITS OWN VECTOR TAKES IT ONTO THE
+#     FETCH PLACE in the frame before (within REACH_TOL px), and it is not farther than the pixel by more than REACH_DEPTH, it stood
+#     there: the frame before's sample is hidden (the bounce).
+# Two vector reads and one depth read a moving pixel, issued together.
+what A VARIANT (the picture changes): on top of v-hide-by-vector, its test made once a pixel and only for a thing that stays (a quarter of the pixel's motion at most), weighed also at a tap a little farther than the pixel (the tyre's contact row), and a thing that stays found a few pixels above the fetch place whose own vector puts it there in the frame before (the tyre that bounced)
+passes ffx_frameinterpolation_disocclusion_mask_pass
+wave64 the same edits in both variants: no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+FFX_STATIC const FfxFloat32 HBV_MIN_PX = 8.0f;
+--- new
+FFX_STATIC const FfxFloat32 HBV_MIN_PX = 8.0f;
+// (the variant v-hide-reach)
+FFX_STATIC const FfxFloat32 HBV_STAY    = 0.25f;   // the thing at the fetch place moves at most this share of the pixel's motion
+FFX_STATIC const FfxFloat32 HBV_BEHIND  = 0.02f;   // a tap farther than the pixel by less than this share is weighed too (the contact row: 1 to 1.5 percent)
+FFX_STATIC const FfxFloat32 REACH       = 4.0f;    // render pixels above the fetch place
+FFX_STATIC const FfxFloat32 REACH_TOL   = 3.0f;    // render pixels
+FFX_STATIC const FfxFloat32 REACH_DEPTH = 0.02f;   // the thing may lie this share farther than the pixel
+static FfxBoolean g_hbvStays = false;                // the thing at the fetch place stays (set once a pixel, before the test)
+
+// does the thing with this vector (render px) stay while the pixel (g_hbvWhole) streams?
+FfxBoolean hbvStaying(FfxFloat32x2 fTherePx)
+{
+    const FfxFloat32x2 fHerePx = g_hbvWhole * FfxFloat32x2(RenderSize());
+    const FfxFloat32x2 fDiffPx = fHerePx - fTherePx;
+    const FfxFloat32   fHere2  = dot(fHerePx, fHerePx);
+    return dot(fDiffPx, fDiffPx) > ffxMax(HBV_MIN_PX * HBV_MIN_PX, HBV_SHARE * HBV_SHARE * fHere2) && dot(fTherePx, fTherePx) < HBV_STAY * HBV_STAY * fHere2;
+}
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+                if (fDepthDiff > 0.0f) {
+--- new
+                // (the variant v-hide-reach) a tap a little farther than the pixel is weighed too where the thing at the fetch place stays
+                // (its ratio below is then negative or infinite: apart, by the rule below for the infinite one)
+                if (fDepthDiff > 0.0f || (estimatedIndex == 0u && g_hbvStays && fDepthDiff > -HBV_BEHIND * fCurrentDepthViewSpace)) {
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+                        const FfxFloat32x2 fSize   = FfxFloat32x2(RenderSize());
+                        const FfxFloat32x2 fDiffPx = (g_hbvWhole - LoadDilatedMotionVector(iSamplePos)) * fSize;
+                        const FfxFloat32x2 fHerePx = g_hbvWhole * fSize;
+                        const FfxFloat32   fLimit  = ffxMax(HBV_MIN_PX * HBV_MIN_PX, HBV_SHARE * HBV_SHARE * dot(fHerePx, fHerePx));
+                        if (dot(fDiffPx, fDiffPx) > fLimit)
+--- new
+                        // (the variant v-hide-reach: the thing at the fetch place, read once a pixel, and only one that stays)
+                        if (g_hbvStays)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    g_hbvWhole = gameMv.fMotionVector * PositionWhole();    // (the variant v-hide-by-vector) the pixel's whole vector
+--- new
+    g_hbvWhole = gameMv.fMotionVector * PositionWhole();    // (the variant v-hide-by-vector) the pixel's whole vector
+
+    // (the variant v-hide-reach) ONCE A PIXEL THAT MOVES: the thing at the fetch place in the frame before, and the one REACH px above it
+    FfxBoolean bStoodThere = false;
+    {
+        const FfxFloat32x2 fSize   = FfxFloat32x2(RenderSize());
+        const FfxFloat32x2 fHerePx = g_hbvWhole * fSize;
+        if (dot(fHerePx, fHerePx) > HBV_MIN_PX * HBV_MIN_PX)
+        {
+            // the three reads are issued together (clamped to the screen), so that none waits for another
+            const FfxFloat32x2 fFetchPx = (fDepthUv + gameMv.fMotionVector * PositionToPrevious()) * fSize;
+            const FfxInt32x2   iLast    = FfxInt32x2(RenderSize()) - 1;
+            const FfxInt32x2   iFetch   = clamp(FfxInt32x2(floor(fFetchPx)), FfxInt32x2(0, 0), iLast);
+            const FfxInt32x2   iAbove   = clamp(FfxInt32x2(floor(fFetchPx - FfxFloat32x2(0.0f, REACH))), FfxInt32x2(0, 0), iLast);
+            const FfxFloat32x2 fHereMv  = LoadDilatedMotionVector(iFetch) * fSize;
+            const FfxFloat32x2 fThereMv = LoadDilatedMotionVector(iAbove) * fSize;
+            const FfxFloat32   fThere   = LoadDilatedDepth(iAbove);
+            g_hbvStays = IsOnScreen(FfxInt32x2(floor(fFetchPx)), RenderSize()) && hbvStaying(fHereMv);
+            const FfxFloat32x2 fWasAt = FfxFloat32x2(iAbove) + 0.5f + fThereMv - fFetchPx;
+#if FFX_FRAMEINTERPOLATION_OPTION_INVERTED_DEPTH
+            const FfxBoolean bNear = fThere >= fDilatedDepth * (1.0f - REACH_DEPTH);
+#else
+            const FfxBoolean bNear = fThere <= fDilatedDepth * (1.0f + REACH_DEPTH);
+#endif
+            bStoodThere = !g_hbvStays && IsOnScreen(FfxInt32x2(floor(fFetchPx - FfxFloat32x2(0.0f, REACH))), RenderSize()) && bNear && dot(fWasAt, fWasAt) < REACH_TOL * REACH_TOL && hbvStaying(fThereMv);
+        }
+    }
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    const FfxFloat32 fDepthClipInterpolatedToPrevious   = 1.0f - ComputeDepthClip(0, fDepthUv + gameMv.fMotionVector * PositionToPrevious(), fDilatedDepth);    // (the mod's cut fi-position)
+--- new
+    // (the variant v-hide-reach) the bounce: a thing that stays stood at the fetch place, by its own vector: hidden, the test not run
+    const FfxFloat32 fDepthClipInterpolatedToPrevious   = bStoodThere ? 0.0f : 1.0f - ComputeDepthClip(0, fDepthUv + gameMv.fMotionVector * PositionToPrevious(), fDilatedDepth);    // (the mod's cut fi-position)
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    fDisocclusionMask.y = ffxSaturate(fDisocclusionMask.y + FfxFloat32(!IsOnScreen(iSamplePosCurrent, RenderSize())));
+
+    StoreDisocclusionMask(iPxPos, fDisocclusionMask);
+--- new
+    fDisocclusionMask.y = ffxSaturate(fDisocclusionMask.y + FfxFloat32(!IsOnScreen(iSamplePosCurrent, RenderSize())));
+
+    // (the variant v-hide-reach) THE MARK: the frame before's sample hidden with a thing that stays at its fetch place (by AMD's test or
+    // by this cut's) is written as 1/255, not 0. The interpolation pass reads the mask as hidden all the same (it asks for exactly 1);
+    // v-lone-place, where it is built, reads the mark (only there does it weigh a lone sample's light, with no read of its own).
+    if (fDisocclusionMask.x == 0.0f && (g_hbvStays || bStoodThere))
+    {
+        fDisocclusionMask.x = 1.0f / 255.0f;
+    }
+
+    StoreDisocclusionMask(iPxPos, fDisocclusionMask);
+--- end

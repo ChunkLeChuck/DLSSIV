@@ -1,0 +1,52 @@
+# THE COVER OF A 3D OVERLAY TRAVELS IN THE HUD-LESS PICTURE'S ALPHA, AND ON IT THE GENERATED FRAME SHOWS THE PRESENTED PIXEL IN FULL
+# (2026-10-12: docs\reports\fg-4\brief-2026-10-12\BRIEF-phone-cover.md, part 3; source\fg\fg_hud.h, "THE PHONE'S COVER IS EXACT").
+# IT CHANGES THE PICTURE WHERE THE ALPHA SAYS SO, AND NOWHERE ELSE: with alpha 1 on every pixel, which is what every HUD-less
+# picture held until this cut, the generated image is what it was, bit for bit (the product's pinned pictures:
+# tools\ffx-own\PICTURES-dlssiv-fg.txt).
+#
+# WHAT AMD'S CODE DOES. With a HUD-less image attached the last pass keeps the real frame's pixel only BY HOW FAR THE TWO
+# PICTURES DIFFER there (ffx_frameinterpolation_inpainting.h, computeInpainting; ffx_frameinterpolation_common.h,
+# CalculateStaticContentFactor: in full from a 10 percent difference of a channel's ratio, in part under it, not at
+# all where the two are equal). That is right for a thin sprite. For a large opaque thing drawn over the scene, the
+# game's mobile phone, it is not: wherever the phone is close in colour to the scene behind it the generated frame
+# shows the INTERPOLATED scene in its place, in part or in full, and what moves behind the phone shows through it on
+# every second frame shown (the owner, 2026-10-12: "some objects or ped ... is visible through the phone screen").
+# Measured at a desk through this library, a static overlay over a scene that moves behind it
+# (docs\reports\fg-4\phone-cover-2026-10-12\proofs.txt): with the HUD-less picture the frame ahead of the overlay on
+# every pixel it changed, 36,167 to 39,487 of the overlay's 539,780 pixels a generated frame were not the real frame's.
+# A HUD-less picture pushed away from the presented one under the phone would close that by a lie: the interpolation
+# reads the HUD-less picture as the scene, and a false colour under the phone is dragged out from under its edge by the
+# scene's vectors.
+#
+# THE CUT. The mod knows the overlay's pixels exactly (the difference of two copies of the back buffer, one ahead of the
+# overlay's first draw and one behind its last: hdr_encode_ps.hlsl, HDR_FGOV) and says them in the HUD-less picture's
+# alpha: 0 ON THE COVER, 1 on every other pixel of every frame. In the dispatch this library already runs its own way
+# (a HUD-less image of 16-bit floats, no debug drawing: bit 30 of the dispatch flags, the cut
+# fi-inpainting-keeps-the-source) the inpainting pass has the HUD-less pixel in hand, all four channels. WHERE ITS ALPHA
+# IS UNDER ONE HALF THE PASS STORES THE PRESENTED PIXEL and does nothing else for that pixel: no inpainting, no factor.
+# Everywhere else, and in every other dispatch (no HUD-less image; a debug drawing; pictures of another format, whose
+# alpha nobody wrote for this), the pass runs as it did.
+# THE ALPHA'S ROAD (read in the source, and held by a desk run with the alpha planted): the encode's second target, the
+# worker's raw copy into the helper's image and the library's own image are all R16G16B16A16_FLOAT, and a copy between
+# them moves the texel's sixteen bits a channel as they are; the image kept for the next pair gets the alpha too, and
+# nothing reads it there.
+# COST: one compare a pixel on a value the pass has loaded already; a pixel of the cover skips AMD's function.
+what A PICTURE CUT OF THE PRODUCT: where the HUD-less picture's alpha is under one half (the mod's encode writes 0 on the pixels of a 3D overlay, the phone, and 1 on every other) the inpainting pass (I10) stores the presented pixel in full; with alpha 1 everywhere the image is what it was
+passes ffx_frameinterpolation_inpainting_pass
+wave64 it edits the pass's file, which both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_inpainting_pass.hlsl
+--- old
+        if (rw_inpainting_mask[iPxPos] > FFX_FRAMEINTERPOLATION_EPSILON
+            || any(FFX_GREATER_THAN(abs(fSource.rgb - LoadPresentBackbuffer(iPxPos).rgb), FfxFloat32x3(0.0, 0.0, 0.0))))
+--- new
+        // (the mod's cut fi-cover-in-alpha) THE COVER OF A 3D OVERLAY: where the HUD-less picture's alpha says so (the mod's
+        // encode writes 0 on the overlay's pixels and 1 on every other) the generated frame shows the presented pixel
+        // IN FULL, whatever was interpolated there and however close the two pictures are
+        if (fSource.a < 0.5f)
+        {
+            StoreFrameinterpolationOutput(iPxPos, FfxFloat32x4(LoadPresentBackbuffer(iPxPos).rgb, 1.0f));
+            return;
+        }
+        if (rw_inpainting_mask[iPxPos] > FFX_FRAMEINTERPOLATION_EPSILON
+            || any(FFX_GREATER_THAN(abs(fSource.rgb - LoadPresentBackbuffer(iPxPos).rgb), FfxFloat32x3(0.0, 0.0, 0.0))))
+--- end

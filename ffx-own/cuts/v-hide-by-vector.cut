@@ -1,0 +1,68 @@
+# A VARIANT, NEVER THE PRODUCT: THE TYRE'S FOOT, HIDDEN BY ITS VECTOR WHERE ITS DEPTH CANNOT SAY SO (2026-10-26; round 9's V2,
+# docs\reports\fg-5\desk-2026-10-26-ghosts: FINDINGS.md section 2 and the replays of the owner's captures of that evening).
+# ON TOP OF THE PRODUCT. IT CHANGES THE PICTURE, ONLY WHERE AMD'S DEPTH TEST COULD NOT DECIDE.
+#
+# THE OWNER'S SYMPTOM: panning the camera to the right at speed, "the tyres have a ghostly transparent faint projection ...
+# projected backwards, a bit (mostly visible on the road not the car body itself)".
+# WHAT THE PRODUCT DOES THERE. The road behind a tyre comes out from under it between two real frames. AMD's occlusion test
+# calls a place hidden in the frame before only where it stands farther than what was there by Ksep x Kfov x the guides'
+# diagonal x the distance (9.0 percent at DLAA and the owner's field of view, 5.6 at Quality); at the foot of a tyre the road
+# just behind it is 4 to 5 percent farther (tyrefoot.py on the capture G1, runs 2 to 4: 158 to 167 of some 230 columns under
+# the threshold). So the uncovered road is blended half and half with the frame before's sample there, which is the tyre: a
+# faint copy of its foot, half a road step behind it. A desk replay with the car's depth set 12 percent nearer (a desk edit,
+# mend.py v2b) takes the arc away; the vectors' mend (v2a) changes no pixel there.
+# THE CUT, in the occlusion pass alone: where a bilinear tap of the test is NOT apart by depth, it is apart all the same when
+# the thing standing at the tap (this frame's dilated vector there) moves on the screen unlike the pixel's own vector, by more
+# than HBV_SHARE of that vector and HBV_MIN_PX render pixels: something that stays (the tyre) over something that streams (the
+# road). Everywhere the depth test decides, and wherever the two vectors agree (the plain moving ground, the car on itself),
+# the product's bits. The dilated vectors are already made, earlier in the same dispatch: one more read (the pass's SRV 7).
+what A VARIANT (the picture changes): the occlusion test's bilinear taps that the depth cannot separate are separated by the vector, where the thing at the tap moves unlike the pixel (a tyre that stays over a road that streams)
+passes ffx_frameinterpolation_disocclusion_mask_pass
+wave64 the same edits in both variants: no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/internal/shaders/ffx_frameinterpolation_disocclusion_mask_pass.hlsl
+--- old
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_DISTORTION_FIELD                        6
+--- new
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_DISTORTION_FIELD                        6
+#define FFX_FRAMEINTERPOLATION_BIND_SRV_DILATED_MOTION_VECTORS                  7   // (the variant v-hide-by-vector) this frame's dilated vectors
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+#define FFX_FRAMEINTERPOLATION_DISOCCLUSION_MASK_H
+--- new
+#define FFX_FRAMEINTERPOLATION_DISOCCLUSION_MASK_H
+
+// (the variant v-hide-by-vector) the pixel's whole vector (uv), set by computeDisocclusionMask before the two tests, and the
+// two numbers of the rule: a tap that the depth cannot separate is separated when the vector at the tap differs from the
+// pixel's by more than HBV_SHARE of the pixel's and more than HBV_MIN_PX render pixels
+static FfxFloat32x2 g_hbvWhole = FfxFloat32x2(0.0f, 0.0f);
+FFX_STATIC const FfxFloat32 HBV_SHARE  = 0.5f;
+FFX_STATIC const FfxFloat32 HBV_MIN_PX = 8.0f;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+                    fDepth += FfxFloat32((fRequiredDepthSeparation / fDepthDiff) >= 1.0f) * fWeight;
+--- new
+                    FfxFloat32 fNotApart = FfxFloat32((fRequiredDepthSeparation / fDepthDiff) >= 1.0f);
+                    if (fNotApart > 0.0f && estimatedIndex == 0u)
+                    {
+                        // (the variant v-hide-by-vector) not apart by depth: apart all the same where the thing at the tap
+                        // moves on the screen unlike this pixel
+                        const FfxFloat32x2 fSize   = FfxFloat32x2(RenderSize());
+                        const FfxFloat32x2 fDiffPx = (g_hbvWhole - LoadDilatedMotionVector(iSamplePos)) * fSize;
+                        const FfxFloat32x2 fHerePx = g_hbvWhole * fSize;
+                        const FfxFloat32   fLimit  = ffxMax(HBV_MIN_PX * HBV_MIN_PX, HBV_SHARE * HBV_SHARE * dot(fHerePx, fHerePx));
+                        if (dot(fDiffPx, fDiffPx) > fLimit)
+                        {
+                            fNotApart = 0.0f;
+                        }
+                    }
+                    fDepth += fNotApart * fWeight;
+--- end
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_disocclusion_mask.h
+--- old
+    LoadInpaintedGameFieldMv(fDepthUv, gameMv);
+--- new
+    LoadInpaintedGameFieldMv(fDepthUv, gameMv);
+    g_hbvWhole = gameMv.fMotionVector * PositionWhole();    // (the variant v-hide-by-vector) the pixel's whole vector
+--- end

@@ -1,0 +1,16 @@
+# THE RECORD OF THE OWN BUILD OF AMD'S FRAME GENERATION: the library that was proven, the toolchain its bytes belong
+# to, and the two inputs the proof cannot hold to anything else (the generated headers, the manifest's rows).
+# tools\prove-ffx-own.py fails when what it builds or finds is not this. tools\ffx-own\ffx_record.py says how each
+# digest is computed. NEVER EDITED BY HAND: python tools\prove-ffx-own.py --new-record writes it and prints what it
+# replaced.
+library ffx-own-fg.dll
+size 739328
+sha256 35daa1a2229305bf7dd4cab7508278b6d1e138ed3d6fb7ed8903f09e89bb08b2
+cl 19.44.35228
+link 14.44.35228.0
+windows-sdk 10.0.26100.0
+dxc 1.8.2502.11
+headers 72
+headers-sha256 d029c64fa53eb30f5f2c33c5c3b20d3b0e5ee22bcde8155031963c89bf2e70bc
+manifest-rows 98
+manifest-sha256 7d00456d94e33433cddf6506ee4b49b7881d1341476599243ce43c34ba4b43f6

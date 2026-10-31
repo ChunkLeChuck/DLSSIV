@@ -1,0 +1,66 @@
+# THE SEARCH'S WINDOWS, LOADED BY GATHER (2026-10-11, the exact cuts stage 3 left). ON TOP OF THE CUT of-search-by-rows,
+# whose text it edits: it is applied after it and cannot be in without it.
+#
+# A group of the search loads its four windows as 576 packed words of the second image's luma, each word four texels of
+# one row by four loads: 36 loads a thread. A gather returns the four texels of a 2 by 2 square in one fetch, so two
+# gathers give one word of row y and the word under it in row y + 1: 9 or 10 fetches a thread instead of 36.
+#
+# WHY EVERY BIT IS AMD'S. A gather at the corner the four texels share ((x + 1, y + 1) of the texture's size, where the
+# fraction is one half of a texel from every edge of the footprint) returns exactly the texels (x, y + 1), (x + 1, y + 1),
+# (x + 1, y), (x, y) in that order, whatever the sampler's filter; the words are packed as AMD's GetPackedLuma packs
+# them (the first texel in the low byte). AMD's function clamps a word's position and fills what lies outside the
+# picture: a pair of words takes the gathers ONLY where both rows and all four columns lie inside the picture, and
+# AMD's own function, unchanged, everywhere else. The sampler is the point sampler with clamped addresses that AMD's
+# own code gives every optical flow pipeline as its first static sampler (ffx_opticalflow.cpp, createPipelineStates):
+# no pipeline description changes. The texture is the R8_UINT luma of the level, whose size is the display's shifted by
+# the level, as AMD's clamp has it.
+# LINUX: a gather of an integer texture through a point sampler is plain Direct3D 11 and Vulkan (textureGather of a
+# usampler2D with a nearest filter); vkd3d-proton has it.
+#
+# MEASURED (3840x2160 FP16, a steady pair, the stamped passes, 2026-10-11): O4 265 to 243 us, O5 72 to 67, O6 55 to 54, at
+# Quality's guides and at DLAA's alike: all of optical flow 515 to 486. The same images by every hash.
+what optical flow's search (O4 to O6), on top of of-search-by-rows: a window's words by two gathers a pair of rows where the pair lies inside the picture (AMD's own loads elsewhere): 9 or 10 fetches a thread instead of 36
+passes ffx_opticalflow_compute_optical_flow_advanced_pass_v5
+wave64 it edits the path of of-search-by-rows, which the cs_6_6 variant WITH [WaveSize(64)] does not compile (its msad4 path is AMD's, line for line; its containers change by their source hash alone)
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+FFX_GROUPSHARED FfxUInt32 rowSearch[BlockCount * BlockCount][SearchBufferSizeY * SearchBufferSizeX];
+--- new
+FFX_GROUPSHARED FfxUInt32 rowSearch[BlockCount * BlockCount][SearchBufferSizeY * SearchBufferSizeX];
+// (the mod's cut of-search-window-by-gather) AMD's first static sampler of every optical flow pipeline: point, clamped
+SamplerState s_DlssivPointClamp : register(s0);
+--- end
+file framegeneration/fsr3/include/gpu/opticalflow/ffx_opticalflow_compute_optical_flow_v5.h
+--- old
+    for (FfxInt32 id = iLocalIndex; id < BlockCount * BlockCount * SearchBufferSizeX * SearchBufferSizeY; id += ThreadCount)
+    {
+        const FfxInt32   k    = id / (SearchBufferSizeX * SearchBufferSizeY);
+        const FfxInt32   w    = id % (SearchBufferSizeX * SearchBufferSizeY);
+        const FfxInt32x2 base = pixelGroupOffset + FfxInt32x2(k & 1, k >> 1) * 8 + vectors[k] - FfxInt32x2(SearchRadiusX, SearchRadiusY);
+        rowSearch[k][w] = LoadSecondImagePackedLuma(FfxInt32x2(base.x + (w % SearchBufferSizeX) * 4, base.y + w / SearchBufferSizeX));
+    }
+--- new
+    // (the mod's cut of-search-window-by-gather) a word and the word under it at once: two gathers where the pair lies
+    // inside the picture, AMD's own function where it does not
+    const FfxInt32x2 iLumaSize = FfxInt32x2(DisplaySize().x >> OpticalFlowPyramidLevel(), DisplaySize().y >> OpticalFlowPyramidLevel());
+    for (FfxInt32 id = iLocalIndex; id < BlockCount * BlockCount * SearchBufferSizeX * (SearchBufferSizeY / 2); id += ThreadCount)
+    {
+        const FfxInt32   k    = id / (SearchBufferSizeX * (SearchBufferSizeY / 2));
+        const FfxInt32   h    = id % (SearchBufferSizeX * (SearchBufferSizeY / 2));
+        const FfxInt32   w    = (h / SearchBufferSizeX) * 2 * SearchBufferSizeX + h % SearchBufferSizeX;
+        const FfxInt32x2 base = pixelGroupOffset + FfxInt32x2(k & 1, k >> 1) * 8 + vectors[k] - FfxInt32x2(SearchRadiusX, SearchRadiusY);
+        const FfxInt32x2 pos  = FfxInt32x2(base.x + (h % SearchBufferSizeX) * 4, base.y + (h / SearchBufferSizeX) * 2);
+        if (pos.x >= 0 && pos.x <= iLumaSize.x - 4 && pos.y >= 0 && pos.y <= iLumaSize.y - 2)
+        {
+            const FfxUInt32x4 g0 = r_optical_flow_previous_input.GatherRed(s_DlssivPointClamp, FfxFloat32x2(pos + FfxInt32x2(1, 1)) / FfxFloat32x2(iLumaSize));
+            const FfxUInt32x4 g1 = r_optical_flow_previous_input.GatherRed(s_DlssivPointClamp, FfxFloat32x2(pos + FfxInt32x2(3, 1)) / FfxFloat32x2(iLumaSize));
+            rowSearch[k][w]                     = g0.w | (g0.z << 8) | (g1.w << 16) | (g1.z << 24);
+            rowSearch[k][w + SearchBufferSizeX] = g0.x | (g0.y << 8) | (g1.x << 16) | (g1.y << 24);
+        }
+        else
+        {
+            rowSearch[k][w]                     = LoadSecondImagePackedLuma(pos);
+            rowSearch[k][w + SearchBufferSizeX] = LoadSecondImagePackedLuma(pos + FfxInt32x2(0, 1));
+        }
+    }
+--- end

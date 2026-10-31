@@ -1,0 +1,36 @@
+# THE LAST PASS LOADS THE GENERATED COLOUR ONLY WHERE IT CAN WRITE IT (2026-10-10, the own build's stage 3).
+#
+# WHAT AMD'S CODE DOES. The inpainting pass runs one thread for every pixel of the display. Each loads the generated
+# colour (the 16-bit float image, 8 bytes a pixel) and the inpainting weight (1 byte a pixel), and then changes the
+# colour in at most three cases: the weight asks for inpainting; a HUD-less image is attached and differs from the
+# presented one at this pixel; one of the two debug drawings is asked for. In every other case it stores nothing, and
+# the colour it loaded was loaded for nothing: 66 MiB a frame at 3840x2160.
+#
+# THE CUT. The weight is loaded first, alone. The colour is loaded only when one of the three cases can occur at all:
+# the weight is above AMD's threshold, or a HUD-less image is attached (a constant of the dispatch), or a debug drawing
+# is asked for (a constant of the dispatch). From there on every line is AMD's, on the same values. Where the colour
+# was not loaded nothing reads it and nothing is stored, as in AMD's code. In the product's shape (no HUD-less image,
+# no debug drawing) the colour is loaded where a pixel asks for inpainting and nowhere else.
+#
+# MEASURED 2026-10-10 (3840x2160 FP16, the two-image set, three rounds, spread 1 us or less; the same images on every
+# hashed pair): the inpainting pass 62 -> 62 us at both guide sizes. NOTHING.
+# LEFT OUT: it saves no time. The pass's 62 us are not the load of the colour (a second try, one thread for 4 by 4
+# pixels, made it slower: fi-inpainting-blocks).
+what the inpainting pass (I10) loads the generated colour only for a pixel it can change: inpainting asked, a HUD-less image attached, or a debug drawing
+passes ffx_frameinterpolation_inpainting_pass
+wave64 it edits one shader file that both the cs_6_2 and the cs_6_6 (wave64) variants are compiled from; it uses no wave operation; not run here on a wave64 device
+file framegeneration/fsr3/include/gpu/frameinterpolation/ffx_frameinterpolation_inpainting.h
+--- old
+    FfxFloat32x4 fInterpolatedColor    = RWLoadFrameinterpolationOutput(iPxPos);
+
+    const FfxFloat32 fInPaintingWeight = fInterpolatedColor.w;
+--- new
+    // (the mod's cut fi-inpainting-load-on-demand: the weight first, the colour only where a line below can change it)
+    const FfxFloat32 fInPaintingWeight = rw_inpainting_mask[iPxPos];
+    FfxFloat32x4 fInterpolatedColor    = FfxFloat32x4(0.0, 0.0, 0.0, fInPaintingWeight);
+    if (fInPaintingWeight > FFX_FRAMEINTERPOLATION_EPSILON || GetHUDLessAttachedFactor() == 1
+        || (GetDispatchFlags() & (FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_TEAR_LINES | FFX_FRAMEINTERPOLATION_DISPATCH_DRAW_DEBUG_RESET_INDICATORS)) != 0)
+    {
+        fInterpolatedColor.rgb = rw_output[iPxPos];
+    }
+--- end
